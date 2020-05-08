@@ -1,3 +1,3 @@
 # Mechanical Design 
 
-![](./IAQ_CAD.png)
+![](mechanical/IAQ_CAD.PNG)
