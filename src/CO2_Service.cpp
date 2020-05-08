@@ -1,33 +1,36 @@
 /****************************************************************************
  Module
-   KeyboardServiec.c
+   CO2_Service.c
 
  Description
-   This is an example service that just prints back the char that was types on
-   serial monitor
+   This is a service to handle the communication with the MH-Z19B CO2 sensor
 
  Notes
 ****************************************************************************/
 /*----------------------------- Include Files -----------------------------*/
-/* include header files for this state machine as well as any machines at the
-   next lower level in the hierarchy that are sub-machines to this machine
-*/
-#include "KeyboardService.h"
+#include "CO2_Service.h"
 #include "ES_framework.h"
-#include "HardwareSerial.h"
 
 /*----------------------------- Module Defines ----------------------------*/
+
+typedef enum{
+  INIT_STATE,
+  WAIT_SM_STATE
+} statusState_t; 
+
+
 
 /*---------------------------- Module Functions ---------------------------*/
 
 
 /*---------------------------- Module Variables ---------------------------*/
 static uint8_t MyPriority;
+static statusState_t currStatusState = INIT_STATE;
 
 /*------------------------------ Module Code ------------------------------*/
 /****************************************************************************
  Function
-     InitTemplateService
+     InitButtonService
 
  Parameters
      uint8_t : the priorty of this service
@@ -40,15 +43,12 @@ static uint8_t MyPriority;
      other required initialization for this service
  Notes
 ****************************************************************************/
-bool InitKeyboardService(uint8_t Priority)
+bool InitCO2Service(uint8_t Priority)
 {
   ES_Event_t ThisEvent;
 
   MyPriority = Priority;
   
-  Serial.begin(BAUD_RATE); 
-  while(!Serial){;}
-
   // post the initial transition event
   ThisEvent.EventType = ES_INIT;
   ThisEvent.ServiceNum = Priority; 
@@ -64,7 +64,7 @@ bool InitKeyboardService(uint8_t Priority)
 
 /****************************************************************************
  Function
-     PostTemplateService
+     PostButtonService
 
  Parameters
      EF_Event_t ThisEvent ,the event to post to the queue
@@ -76,7 +76,7 @@ bool InitKeyboardService(uint8_t Priority)
      Posts an event to this state machine's queue
  Notes
 ****************************************************************************/
-bool PostKeyboardService(ES_Event_t ThisEvent)
+bool PostCO2Service(ES_Event_t ThisEvent)
 {
   ThisEvent.ServiceNum = MyPriority; 
   return ES_PostToService(ThisEvent);
@@ -84,7 +84,7 @@ bool PostKeyboardService(ES_Event_t ThisEvent)
 
 /****************************************************************************
  Function
-    RunTemplateService
+    RunCO2Service
 
  Parameters
    ES_Event_t : the event to process
@@ -93,43 +93,37 @@ bool PostKeyboardService(ES_Event_t ThisEvent)
    ES_Event, ES_NO_EVENT if no error ES_ERROR otherwise
 
  Description
-   add your description here
+   state machine that handles the serial communication with the CO2 sensor 
  Notes
 ****************************************************************************/
-ES_Event_t RunKeyboardService(ES_Event_t ThisEvent)
+ES_Event_t RunCO2Service(ES_Event_t ThisEvent)
 {
   ES_Event_t ReturnEvent;
   ReturnEvent.EventType = ES_NO_EVENT; // assume no errors
-  
-  if(ThisEvent.EventType == ES_SERIAL){
-    Serial.printf("Kb: %c\n", ThisEvent.EventParam);
-  }
-  else if(ThisEvent.EventType == ES_SW_BUTTON_PRESS)
+
+  switch (currStatusState)
   {
-    if(ThisEvent.EventParam == LONG_BT_PRESS)
+    case INIT_STATE:
     {
-      Serial.println("Long press");
+      
+
+      break;
     }
-    else
+    case WAIT_SM_STATE:
     {
-      Serial.println("Short press"); 
+      
+      
+      break;
     }
-    
   }
 
   return ReturnEvent;
 }
 
 
-bool EventCheckerKeyBoard()
-{
-  if (Serial.available()){ 
-    ES_Event_t newEvent;
-    newEvent.EventType = ES_SERIAL;
-    newEvent.EventParam = Serial.read();
-    PostKeyboardService(newEvent); 
-    return true; 
-  }
+bool EventCheckerCO2(){
+  
+
   return false; 
 }
 

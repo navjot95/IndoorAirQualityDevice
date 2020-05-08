@@ -11,10 +11,12 @@
 #ifndef ES_Framework_H
 #define ES_Framework_H
 
-#include <stdbool.h>
-#include <stdint.h>
+
 #include "ES_Event.h"
 #include "ES_ServicesHeaders.h"
+#include <Arduino.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 typedef enum
 {

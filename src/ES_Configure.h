@@ -14,8 +14,13 @@
 
 /********************** Pin Configuration ***********************************/ 
 /****************************************************************************/
+#define BUTTON_PIN 26
+
 #define BAUD_RATE 115200
 
+
+#define SHORT_BT_PRESS 0
+#define LONG_BT_PRESS 1
 
 /****************************************************************************/
 // Name/define the events of interest
@@ -27,7 +32,9 @@ typedef enum
   ES_INIT,                  /* used to transition from initial pseudo-state */
   ES_TIMEOUT,               /* signals that the timer has expired */
   /* User-defined events start here */
-  ES_SERIAL
+  ES_SERIAL,
+  ES_HW_BUTTON_EVENT,         /* when physical button pressed (1) or released (0)*/
+  ES_SW_BUTTON_PRESS          /* short button press (0) and long button press (1)*/
 }ES_EventType_t;
 
 
@@ -35,7 +42,7 @@ typedef enum
 // add all event checker functions here (comma separated)
 // the functions at the beginning of the list are checked first 
 
-#define EVENT_CHECKER_LIST EventCheckerKeyBoard
+#define EVENT_CHECKER_LIST EventCheckerKeyBoard, EventCheckerButton
 
 
 /****************************** Timers **************************************/ 
@@ -55,7 +62,7 @@ typedef enum
 /****************************************************************************/
 // This macro determines that nuber of services that are *actually* used in
 // a particular application. It will vary in value from 1 to MAX_NUM_SERVICES
-#define NUM_SERVICES 1
+#define NUM_SERVICES 2
 #define QUEUE_SIZE 20  // min value should be NUM_SERVICES
 // Note: queue sizes for individual services are not implemented yet. Currently there's just 1 queue, whose size
 //       is defined by QUEUE_SIZE 
@@ -82,11 +89,11 @@ typedef enum
 // These are the definitions for Service 1
 #if NUM_SERVICES > 1
 // the header file with the public function prototypes
-#define SERV_1_HEADER "TestHarnessService1.h"
+#define SERV_1_HEADER "ButtonService.h"
 // the name of the Init function
-#define SERV_1_INIT InitTestHarnessService1
+#define SERV_1_INIT InitButtonService
 // the name of the run function
-#define SERV_1_RUN RunTestHarnessService1
+#define SERV_1_RUN RunButtonService
 // How big should this services Queue be?
 // #define SERV_1_QUEUE_SIZE 3
 #endif
