@@ -1,2 +1,2 @@
 # IndoorAirQualityDevice
-An event-driven framework for bare-metal code compatible with the Arduino platform
+Source code, electrical design, and mechanical design to create your own DIY indoor air quality device.
