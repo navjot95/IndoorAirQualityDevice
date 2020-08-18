@@ -15,9 +15,10 @@
 /********************** Pin Configuration ***********************************/ 
 /****************************************************************************/
 #define BUTTON_PIN 26
+#define PWR_EN_PIN 12
+#define TIMER_TEST_PIN 4
 
 #define BAUD_RATE 115200
-
 
 #define SHORT_BT_PRESS 0
 #define LONG_BT_PRESS 1
@@ -31,10 +32,17 @@ typedef enum
   ES_ERROR,                 /* used to indicate an error from the service */
   ES_INIT,                  /* used to transition from initial pseudo-state */
   ES_TIMEOUT,               /* signals that the timer has expired */
+  ES_FAIL,                  /* used to indicate something was unsuccessful */ 
+  ES_SUCCESS,               /* used to indicate something was successful */ 
   /* User-defined events start here */
   ES_SERIAL,
+  ES_SERIAL1,
+  ES_SERIAL2,
   ES_HW_BUTTON_EVENT,         /* when physical button pressed (1) or released (0)*/
-  ES_SW_BUTTON_PRESS          /* short button press (0) and long button press (1)*/
+  ES_SW_BUTTON_PRESS,          /* short button press (0) and long button press (1)*/
+  ES_READ_CO2,               /* command to read CO2 values */
+  ES_READ_HPM,                 /* command to read PM10 and PM2.5 values */
+  COMMSM_SEND
 }ES_EventType_t;
 
 
@@ -42,18 +50,41 @@ typedef enum
 // add all event checker functions here (comma separated)
 // the functions at the beginning of the list are checked first 
 
-#define EVENT_CHECKER_LIST EventCheckerKeyBoard, EventCheckerButton
+//EventCheckerKeyBoard, EventCheckerButton
+#define EVENT_CHECKER_LIST EventCheckerCO2, EventCheckerHPM
+
 
 
 /****************************** Timers **************************************/ 
-/****************************************************************************/
-// Use this section to define timer numbers 
-// Actual definitions of timers are defined in the services that use them so not to create multi-def errors 
-// #define TEST_TIMER_NUM        1
+// These are the definitions for the post functions to be executed when the
+// corresponding timer expires. All 16 must be defined. If you are not using
+// a timer, then you should use TIMER_UNUSED
+// Unlike services, any combination of timers may be used and there is no
+// priority in servicing them
+#define TIMER_UNUSED ((pPostFunc)0)
+#define TIMER0_RESP_FUNC PostCO2Service
+#define TIMER1_RESP_FUNC PostHPMService
+#define TIMER2_RESP_FUNC PostHPMService
+#define TIMER3_RESP_FUNC TIMER_UNUSED
+#define TIMER4_RESP_FUNC TIMER_UNUSED
+#define TIMER5_RESP_FUNC TIMER_UNUSED
+#define TIMER6_RESP_FUNC TIMER_UNUSED
+#define TIMER7_RESP_FUNC TIMER_UNUSED
+#define TIMER8_RESP_FUNC TIMER_UNUSED
+#define TIMER9_RESP_FUNC TIMER_UNUSED
+#define TIMER10_RESP_FUNC TIMER_UNUSED
+#define TIMER11_RESP_FUNC TIMER_UNUSED
+#define TIMER12_RESP_FUNC TIMER_UNUSED
+#define TIMER13_RESP_FUNC TIMER_UNUSED
+#define TIMER14_RESP_FUNC TIMER_UNUSED
+#define TIMER15_RESP_FUNC PostTimerTestService
+
+#define CO2_TIMER_NUM 0
+#define HPM_TIMER_NUM 1
+#define COMMSM_TIMER_NUM 2
 
 
-
-/****************************************************************************/
+/********************************Services********************************************/
 // The maximum number of services sets an upper bound on the number of
 // services that the framework will handle. Reasonable values are 8 and 16
 // corresponding to an 8-bit(uint8_t) and 16-bit(uint16_t) Ready variable size
@@ -62,7 +93,7 @@ typedef enum
 /****************************************************************************/
 // This macro determines that nuber of services that are *actually* used in
 // a particular application. It will vary in value from 1 to MAX_NUM_SERVICES
-#define NUM_SERVICES 2
+#define NUM_SERVICES 5
 #define QUEUE_SIZE 20  // min value should be NUM_SERVICES
 // Note: queue sizes for individual services are not implemented yet. Currently there's just 1 queue, whose size
 //       is defined by QUEUE_SIZE 
@@ -102,39 +133,39 @@ typedef enum
 // These are the definitions for Service 2
 #if NUM_SERVICES > 2
 // the header file with the public function prototypes
-#define SERV_2_HEADER "TestHarnessService2.h"
+#define SERV_2_HEADER "TimerTestService.h"
 // the name of the Init function
-#define SERV_2_INIT InitTestHarnessService2
+#define SERV_2_INIT InitTimerTestService
 // the name of the run function
-#define SERV_2_RUN RunTestHarnessService2
+#define SERV_2_RUN RunTimerTestService
 // How big should this services Queue be?
-#define SERV_2_QUEUE_SIZE 3
+// #define SERV_2_QUEUE_SIZE 3
 #endif
 
 /****************************************************************************/
 // These are the definitions for Service 3
 #if NUM_SERVICES > 3
 // the header file with the public function prototypes
-#define SERV_3_HEADER "TestHarnessService3.h"
+#define SERV_3_HEADER "CO2_Service.h"
 // the name of the Init function
-#define SERV_3_INIT InitTestHarnessService3
+#define SERV_3_INIT InitCO2Service
 // the name of the run function
-#define SERV_3_RUN RunTestHarnessService3
+#define SERV_3_RUN RunCO2Service
 // How big should this services Queue be?
-#define SERV_3_QUEUE_SIZE 3
+// #define SERV_3_QUEUE_SIZE 3
 #endif
 
 /****************************************************************************/
 // These are the definitions for Service 4
 #if NUM_SERVICES > 4
 // the header file with the public function prototypes
-#define SERV_4_HEADER "TestHarnessService4.h"
+#define SERV_4_HEADER "HPM_Service.h"
 // the name of the Init function
-#define SERV_4_INIT InitTestHarnessService4
+#define SERV_4_INIT InitHPMService
 // the name of the run function
-#define SERV_4_RUN RunTestHarnessService4
+#define SERV_4_RUN RunHPMService
 // How big should this services Queue be?
-#define SERV_4_QUEUE_SIZE 3
+// #define SERV_4_QUEUE_SIZE 3
 #endif
 
 /****************************************************************************/

@@ -14,9 +14,12 @@
 
 #include "ES_Event.h"
 #include "ES_ServicesHeaders.h"
+#include "ES_Port.h"
 #include <Arduino.h>
 #include <stdbool.h>
 #include <stdint.h>
+
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 typedef enum
 {
@@ -29,7 +32,7 @@ typedef enum
 }ES_Return_t;
 
 
-ES_Return_t ES_Initialize();
+ES_Return_t ES_Initialize(TimerRate_t Rate);
 ES_Return_t ES_Run(void);
 bool ES_PostToService(ES_Event_t ThisEvent);
 

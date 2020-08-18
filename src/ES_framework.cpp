@@ -12,9 +12,12 @@
 
 *****************************************************************************/
 /*----------------------------- Include Files -----------------------------*/
-#include <stdio.h>
+#include "ES_Port.h"
 #include "ES_framework.h"
 #include "ES_Queue.h"
+#include "ES_Timers.h"
+
+#include <stdio.h>
 
 /*----------------------------- Module Defines ----------------------------*/
 typedef struct ES_service
@@ -22,8 +25,6 @@ typedef struct ES_service
   bool (*init_funct)(uint8_t);
   ES_Event_t (*run_funct)(ES_Event_t);
 }ES_service_t; 
-
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 /*---------------------------- Module Functions ---------------------------*/
 bool ES_ScanEventCheckers();
@@ -101,11 +102,13 @@ static ES_service_t const servicesList[NUM_SERVICES] = {
  Description
    Initialize all the services and tests for NULL pointers in the array
 ****************************************************************************/
-ES_Return_t ES_Initialize()
+ES_Return_t ES_Initialize(TimerRate_t Rate)
 {
   if(QUEUE_SIZE < NUM_SERVICES){
     return FailedIndex;
   }
+
+  ES_Timer_Init(Rate); 
   
   Queue.events_arr = eventsList; 
   Queue.capacity = QUEUE_SIZE; 
@@ -134,7 +137,7 @@ ES_Return_t ES_Initialize()
  Returns
    ES_Return_t : FailedRun is any of the run functions failed during execution
  Description
-   This is the main framework function. It call the appropriate run function when 
+   This is the main framework function. It calls the appropriate run function when 
    it detects the Queue isn't empty or one of the event checkers returned a true.
    Currently, there is 1 queue so all events are handeled in a LIFO manner without 
    regard to priority of the service.  
@@ -147,6 +150,7 @@ ES_Return_t ES_Run(void)
   static ES_Event_t ThisEvent = {.EventType=ES_NO_EVENT, .EventParam=0, .ServiceNum=0};
   static ES_Return_t returnEvent = Success; 
 
+  _HW_Process_Pending_Ints();  // process framework hw timer
 
   // go through all event checkers until there's an event 
   if(ThisEvent.EventType != ES_ERROR && (ES_ScanEventCheckers() || !ES_isEmpty(&Queue)))
