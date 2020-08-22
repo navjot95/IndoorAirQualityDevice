@@ -1,5 +1,10 @@
-#include <Arduino.h>
+
 #include "ES_framework.h"
+// #include <InfluxDbClient.h>
+// #include <InfluxDbCloud.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <Arduino.h>
 
 ES_Return_t ES_returnVal; 
 
@@ -12,11 +17,10 @@ void setup() {
   ES_returnVal = ES_Initialize(Rate); 
   if(ES_returnVal != Success)
   {
-    // digitalWrite(LED_PIN, HIGH);  // turn light on for debugging 
+    // digitalWrite(BUILTIN_LED, HIGH);  // turn light on for debugging 
     Serial.printf("Err: %i\n", ES_returnVal);
     Serial.println("******Stoping code*******");
   } 
-
 }
 
 
@@ -27,7 +31,7 @@ void loop(){
 
   if(ES_returnVal != Success && !sentFlag)
   {
-    // digitalWrite(LED_PIN, HIGH);  // turn light on for debugging 
+    // digitalWrite(BUILTIN_LED, HIGH);  // turn light on for debugging 
     Serial.printf("Err: %i\n", ES_returnVal);
     Serial.println("******Stopping code*******");
     sentFlag = true; 

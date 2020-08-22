@@ -113,10 +113,6 @@ bool InitHPMService(uint8_t Priority)
   ES_Event_t ThisEvent;
   MyPriority = Priority;
 
-  // TODO: Find place to do this once 
-  pinMode(PWR_EN_PIN, OUTPUT); 
-  digitalWrite(PWR_EN_PIN, HIGH); 
-
   Serial1.begin(9600);
   while (!Serial1) {
     ;

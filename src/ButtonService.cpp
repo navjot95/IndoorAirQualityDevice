@@ -52,10 +52,7 @@ static statusState_t currStatusState = START_SM_STATE;
 bool InitButtonService(uint8_t Priority)
 {
   ES_Event_t ThisEvent;
-
   MyPriority = Priority;
-  
-  pinMode(BUTTON_PIN, INPUT); 
 
   // post the initial transition event
   ThisEvent.EventType = ES_INIT;
@@ -130,8 +127,8 @@ ES_Event_t RunButtonService(ES_Event_t ThisEvent)
         ES_Event_t newEvent; 
         newEvent.EventType = ES_SW_BUTTON_PRESS; 
         newEvent.EventParam = SHORT_BT_PRESS;
-        // Serial.printf("%lu\n", elapsed_time); 
-        PostKeyboardService(newEvent); 
+        Serial.printf("%lu\n", elapsed_time); 
+        PostMainService(newEvent); 
 
         currStatusState = START_SM_STATE; 
         timeStamp = millis(); 
@@ -141,8 +138,8 @@ ES_Event_t RunButtonService(ES_Event_t ThisEvent)
         ES_Event_t newEvent; 
         newEvent.EventType = ES_SW_BUTTON_PRESS; 
         newEvent.EventParam = LONG_BT_PRESS;
-        PostKeyboardService(newEvent); 
-        // Serial.printf("%lu\n", elapsed_time); 
+        PostMainService(newEvent); 
+        Serial.printf("%lu\n", elapsed_time); 
 
         currStatusState = START_SM_STATE; 
         timeStamp = millis(); 

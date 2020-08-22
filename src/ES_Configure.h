@@ -42,7 +42,8 @@ typedef enum
   ES_SW_BUTTON_PRESS,          /* short button press (0) and long button press (1)*/
   ES_READ_CO2,               /* command to read CO2 values */
   ES_READ_HPM,                 /* command to read PM10 and PM2.5 values */
-  COMMSM_SEND
+  COMMSM_SEND,
+  SENSOR_UPDATE_EVENT
 }ES_EventType_t;
 
 
@@ -51,7 +52,7 @@ typedef enum
 // the functions at the beginning of the list are checked first 
 
 //EventCheckerKeyBoard, EventCheckerButton
-#define EVENT_CHECKER_LIST EventCheckerCO2, EventCheckerHPM
+#define EVENT_CHECKER_LIST EventCheckerCO2, EventCheckerHPM, EventCheckerButton
 
 
 
@@ -91,9 +92,9 @@ typedef enum
 #define MAX_NUM_SERVICES 16
 
 /****************************************************************************/
-// This macro determines that nuber of services that are *actually* used in
+// This macro determines that number of services that are *actually* used in
 // a particular application. It will vary in value from 1 to MAX_NUM_SERVICES
-#define NUM_SERVICES 5
+#define NUM_SERVICES 7
 #define QUEUE_SIZE 20  // min value should be NUM_SERVICES
 // Note: queue sizes for individual services are not implemented yet. Currently there's just 1 queue, whose size
 //       is defined by QUEUE_SIZE 
@@ -172,11 +173,11 @@ typedef enum
 // These are the definitions for Service 5
 #if NUM_SERVICES > 5
 // the header file with the public function prototypes
-#define SERV_5_HEADER "TestHarnessService5.h"
+#define SERV_5_HEADER "mainService.h"
 // the name of the Init function
-#define SERV_5_INIT InitTestHarnessService5
+#define SERV_5_INIT InitMainService
 // the name of the run function
-#define SERV_5_RUN RunTestHarnessService5
+#define SERV_5_RUN RunMainService
 // How big should this services Queue be?
 #define SERV_5_QUEUE_SIZE 3
 #endif
@@ -185,11 +186,11 @@ typedef enum
 // These are the definitions for Service 6
 #if NUM_SERVICES > 6
 // the header file with the public function prototypes
-#define SERV_6_HEADER "TestHarnessService6.h"
+#define SERV_6_HEADER "ePaperService.h"
 // the name of the Init function
-#define SERV_6_INIT InitTestHarnessService6
+#define SERV_6_INIT InitePaperService
 // the name of the run function
-#define SERV_6_RUN RunTestHarnessService6
+#define SERV_6_RUN RunePaperService
 // How big should this services Queue be?
 #define SERV_6_QUEUE_SIZE 3
 #endif

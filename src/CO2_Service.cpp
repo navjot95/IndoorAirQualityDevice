@@ -61,8 +61,6 @@ bool InitCO2Service(uint8_t Priority)
   ES_Event_t ThisEvent;
   MyPriority = Priority;
 
-  pinMode(PWR_EN_PIN, OUTPUT); 
-  digitalWrite(PWR_EN_PIN, HIGH); 
   Serial2.begin(9600);
   while (!Serial2) {
     ;
