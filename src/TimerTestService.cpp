@@ -41,28 +41,29 @@ static uint8_t MyPriority;
 ****************************************************************************/
 bool InitTimerTestService(uint8_t Priority)
 {
-  ES_Event_t ThisEvent;
+  // ES_Event_t ThisEvent;
   MyPriority = Priority;
 
   // pinMode(TIMER_TEST_PIN, OUTPUT); 
-  ES_TimerReturn_t returnVal = ES_Timer_InitTimer(TIMER_NUM, TIMER_LEN); 
+  // ES_TimerReturn_t returnVal = ES_Timer_InitTimer(TIMER_NUM, TIMER_LEN); 
 
-  if(returnVal == ES_Timer_ERR)
-  {
-    Serial.println("Timer err at init\n");
-  }
+  // if(returnVal == ES_Timer_ERR)
+  // {
+  //   Serial.println("Timer err at init\n");
+  // }
  
   // post the initial transition event
-  ThisEvent.EventType = ES_INIT;
-  ThisEvent.ServiceNum = Priority; 
-  if (ES_PostToService(ThisEvent) == true)
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  // ThisEvent.EventType = ES_INIT;
+  // ThisEvent.ServiceNum = Priority; 
+  // if (ES_PostToService(ThisEvent) == true)
+  // {
+  //   return true;
+  // }
+  // else
+  // {
+  //   return false;
+  // }
+  return true; 
 }
 
 /****************************************************************************
@@ -109,9 +110,9 @@ ES_Event_t RunTimerTestService(ES_Event_t ThisEvent)
   {
     pinState ^= 0x01; 
     // digitalWrite(TIMER_TEST_PIN, pinState); 
-    // ES_Event_t NewEvent = {.EventType=ES_READ_CO2};
+    // ES_Event_t NewEvent = {.EventType=ES_READ_SENSOR};
     // PostCO2Service(NewEvent); 
-    ES_Event_t NewEvent = {.EventType=ES_READ_HPM}; 
+    ES_Event_t NewEvent = {.EventType=ES_READ_SENSOR}; 
     PostHPMService(NewEvent); 
 
     ES_TimerReturn_t returnVal = ES_Timer_InitTimer(TIMER_NUM, TIMER_LEN); 

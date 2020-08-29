@@ -17,6 +17,7 @@
 #define BUTTON_PIN 26
 #define PWR_EN_PIN 12
 #define TIMER_TEST_PIN 4
+#define BAT_PIN A13
 
 #define BAUD_RATE 115200
 
@@ -38,12 +39,12 @@ typedef enum
   ES_SERIAL,
   ES_SERIAL1,
   ES_SERIAL2,
+  ES_I2C,
   ES_HW_BUTTON_EVENT,         /* when physical button pressed (1) or released (0)*/
   ES_SW_BUTTON_PRESS,          /* short button press (0) and long button press (1)*/
-  ES_READ_CO2,               /* command to read CO2 values */
-  ES_READ_HPM,                 /* command to read PM10 and PM2.5 values */
+  ES_READ_SENSOR,               /* command to send to sensor to read its value(s) */
   COMMSM_SEND,
-  SENSOR_UPDATE_EVENT
+  UPDATES_DONE_EVENT
 }ES_EventType_t;
 
 
@@ -52,7 +53,7 @@ typedef enum
 // the functions at the beginning of the list are checked first 
 
 //EventCheckerKeyBoard, EventCheckerButton
-#define EVENT_CHECKER_LIST EventCheckerCO2, EventCheckerHPM, EventCheckerButton
+#define EVENT_CHECKER_LIST EventCheckerCO2, EventCheckerHPM, EventChecker_SVM30, EventCheckerButton
 
 
 
@@ -66,9 +67,9 @@ typedef enum
 #define TIMER0_RESP_FUNC PostCO2Service
 #define TIMER1_RESP_FUNC PostHPMService
 #define TIMER2_RESP_FUNC PostHPMService
-#define TIMER3_RESP_FUNC TIMER_UNUSED
-#define TIMER4_RESP_FUNC TIMER_UNUSED
-#define TIMER5_RESP_FUNC TIMER_UNUSED
+#define TIMER3_RESP_FUNC PostMainService
+#define TIMER4_RESP_FUNC PostSVM30Service
+#define TIMER5_RESP_FUNC PostSVM30Service
 #define TIMER6_RESP_FUNC TIMER_UNUSED
 #define TIMER7_RESP_FUNC TIMER_UNUSED
 #define TIMER8_RESP_FUNC TIMER_UNUSED
@@ -83,6 +84,9 @@ typedef enum
 #define CO2_TIMER_NUM 0
 #define HPM_TIMER_NUM 1
 #define COMMSM_TIMER_NUM 2
+#define MAIN_SERV_TIMER_NUM 3
+#define SVM30_TIMER_NUM 4
+#define SVM30_TIMER2_NUM 5
 
 
 /********************************Services********************************************/
@@ -94,7 +98,7 @@ typedef enum
 /****************************************************************************/
 // This macro determines that number of services that are *actually* used in
 // a particular application. It will vary in value from 1 to MAX_NUM_SERVICES
-#define NUM_SERVICES 7
+#define NUM_SERVICES 8
 #define QUEUE_SIZE 20  // min value should be NUM_SERVICES
 // Note: queue sizes for individual services are not implemented yet. Currently there's just 1 queue, whose size
 //       is defined by QUEUE_SIZE 
@@ -199,11 +203,11 @@ typedef enum
 // These are the definitions for Service 7
 #if NUM_SERVICES > 7
 // the header file with the public function prototypes
-#define SERV_7_HEADER "TestHarnessService7.h"
+#define SERV_7_HEADER "SVM30Service.h"
 // the name of the Init function
-#define SERV_7_INIT InitTestHarnessService7
+#define SERV_7_INIT InitSVM30Service
 // the name of the run function
-#define SERV_7_RUN RunTestHarnessService7
+#define SERV_7_RUN RunSVM30Service
 // How big should this services Queue be?
 #define SERV_7_QUEUE_SIZE 3
 #endif

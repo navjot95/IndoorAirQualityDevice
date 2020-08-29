@@ -28,6 +28,9 @@
 #include "ePaper.h"
 
 
+#define MAX_PARTIAL_REFRESHES 5  // max number of continuous partial refreshes before doing a full refresh
+RTC_DATA_ATTR static uint8_t refreshCounter = 0; 
+
 static const uint8_t lut_full_update[] = {
     0x50, 0xAA, 0x55, 0xAA, 0x11, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -48,14 +51,13 @@ static const uint8_t lut_partial_update[] = {
 Epd::~Epd() {
 };
 
-Epd::Epd(bool partialRefreshMode) {
+Epd::Epd() {
     reset_pin = RST_PIN;
     dc_pin = DC_PIN;
     cs_pin = CS_PIN;
     busy_pin = BUSY_PIN;
     width = SCREEN_WIDTH;
     height = SCREEN_HEIGHT;
-    partialRefresh = partialRefreshMode; 
 
     memset(frame_buffer_black, 0X00, sizeof(frame_buffer_black));
 };
@@ -91,8 +93,6 @@ int Epd::Init(void) {
     SendData(0x03);                     
     SendCommand(0x11); // DATA_ENTRY_MODE_SETTING
     SendData(0x03);
-
-    ChangeRefreshMode(partialRefresh); 
 
     /* EPD hardware init end */
 
@@ -139,13 +139,13 @@ void Epd::SendData(unsigned char data) {
  */
 void Epd::WaitUntilIdle(void) {
     while(DigitalRead(busy_pin) == 0) {      //0: busy, 1: idle
-        DelayMs(100);
+        DelayMs(50);
     }      
 }
 
 /**
  *  @brief: module reset.
- *          often used to awaken the module in deep sleep,
+ *          used to awaken the module in deep sleep,
  *          see Epd::Sleep();
  */
 void Epd::Reset(void) {
@@ -159,7 +159,7 @@ void Epd::Reset(void) {
 
 
 
-void Epd::SetWindow(size_t Xstart, size_t Ystart, size_t Xend, size_t Yend)
+void Epd::SetWindow(uint16_t Xstart, uint16_t Ystart, uint16_t Xend, uint16_t Yend)
 {
     // this is from sample code
     SendCommand(0x44); // SET_RAM_X_ADDRESS_START_END_POSITION
@@ -174,7 +174,7 @@ void Epd::SetWindow(size_t Xstart, size_t Ystart, size_t Xend, size_t Yend)
 }
 
 
-void Epd::SetCursor(size_t Xstart, size_t Ystart)
+void Epd::SetCursor(uint16_t Xstart, uint16_t Ystart)
 {
     SendCommand(0x4E); // SET_RAM_X_ADDRESS_COUNTER
     SendData((Xstart >> 3) & 0xFF);
@@ -216,7 +216,7 @@ void Epd::DisplayFrame(const uint8_t* img) {
  *  @brief: After this command is transmitted the screen 
  *  is turned white 
  */
-void Epd::clear(void){
+void Epd::clearePaper(void){
     size_t byteWidth = SCREEN_WIDTH / 8;
 
     SetWindow(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -230,6 +230,14 @@ void Epd::clear(void){
     TurnOnDisplay();
 }
 
+/**
+ *  @brief: After this command is transmitted the buffer if zeroed
+ */
+void Epd::clearBuffer(void){
+    memset(frame_buffer_black, 0X00, sizeof(frame_buffer_black));
+}
+
+
 
 void Epd::Sleep(void) {
     SendCommand(0x10);
@@ -241,7 +249,7 @@ void Epd::Sleep(void) {
 // topLeft_y - y coordinate of the top-left corner of the image on screen
 // xLen - bit length of image in the x direction
 // yLen - bit length of image in the y direction
-int8_t Epd::showImg(const uint8_t *img, size_t topLeft_x, size_t topLeft_y, size_t xLen, size_t yLen)
+int8_t Epd::showImg(const uint8_t *img, uint16_t topLeft_x, uint16_t topLeft_y, uint16_t xLen, uint16_t yLen)
 {
     if((topLeft_x + xLen) > SCREEN_WIDTH || (topLeft_y + yLen) > SCREEN_HEIGHT || topLeft_x < 0 || topLeft_y < 0){
         return -1; 
@@ -251,7 +259,7 @@ int8_t Epd::showImg(const uint8_t *img, size_t topLeft_x, size_t topLeft_y, size
 }
 
 
-int8_t Epd::copyImgToBuffer(size_t tableByteIdx, size_t topLeft_x, size_t topLeft_y, const uint8_t *img, size_t xLen, size_t yLen)
+int8_t Epd::copyImgToBuffer(size_t tableByteIdx, uint16_t topLeft_x, uint16_t topLeft_y, const uint8_t *img, uint16_t xLen, uint16_t yLen)
 { 
     uint16_t lineByteWidth = calcXByteLength(xLen);  // byte length of image in the x direction
     size_t bitPos = 0;  // for a 200x200 screen, this value is 0-39,999 
@@ -268,7 +276,7 @@ int8_t Epd::copyImgToBuffer(size_t tableByteIdx, size_t topLeft_x, size_t topLef
 
 
 
-int8_t Epd::drawRect(size_t topLeft_x, size_t topLeft_y, size_t xLen, size_t yLen, bool black)
+int8_t Epd::drawRect(uint16_t topLeft_x, uint16_t topLeft_y, uint16_t xLen, uint16_t yLen, bool black)
 {
     if((topLeft_x + xLen) > SCREEN_WIDTH || (topLeft_y + yLen) > SCREEN_HEIGHT || topLeft_x < 0 || topLeft_y < 0){
         return -1; 
@@ -303,15 +311,15 @@ int8_t Epd::drawRect(size_t topLeft_x, size_t topLeft_y, size_t xLen, size_t yLe
  *  xPos: x position of where the left side of the string should start - 0 indexed
  *  yPos: y posiiton of where the bottom side of the string should start - 0 indexed 
  */
-int8_t Epd::printf(const char *strToPrint, font_t *scrnFont, size_t xPos, size_t yPos){
+int8_t Epd::printf(const char *strToPrint, font_t *scrnFont, uint16_t xPos, uint16_t yPos){
     // should have room to print at least 1 char
     if((xPos + scrnFont->charHeight) > SCREEN_WIDTH || xPos < 0 || yPos < 0){
         return -1; 
     };
 
     size_t idx = 0; 
-    size_t xCursor = xPos; 
-    size_t yCursor = yPos;
+    uint16_t xCursor = xPos; 
+    uint16_t yCursor = yPos;
     while(strToPrint[idx] != '\0'){
         if(strToPrint[idx] == ' ')
         {
@@ -334,8 +342,24 @@ int8_t Epd::printf(const char *strToPrint, font_t *scrnFont, size_t xPos, size_t
 }
 
 
-void Epd::updateScreen()
+void Epd::updateScreen(bool forceFullRefresh)
 {
+    if(forceFullRefresh)
+    {
+        refreshCounter = 0; 
+    }
+    
+    if(refreshCounter % (MAX_PARTIAL_REFRESHES+1) == 0)
+    {
+        refreshCounter = 0; 
+        ChangeRefreshMode(false); 
+    }
+    else if(refreshCounter % (MAX_PARTIAL_REFRESHES+1) == 1)
+    {
+        ChangeRefreshMode(true); 
+    }
+
+    refreshCounter++; 
     DisplayFrame(frame_buffer_black); 
 }
 
@@ -354,7 +378,7 @@ size_t Epd::getAsciiTableIdx(const char thisChar, font_t *scrnFont){
 }
 
 
-void Epd::copyCharToBuffer(char charToPrint, size_t xCursor, size_t yCursor, font_t *scrnFont){
+void Epd::copyCharToBuffer(char charToPrint, uint16_t xCursor, uint16_t yCursor, font_t *scrnFont){
     size_t tableByteIdx = getAsciiTableIdx(charToPrint, scrnFont); 
     uint16_t charYLen = getCharWidth(charToPrint, scrnFont); 
 

@@ -64,12 +64,12 @@ typedef enum{
 #define STOP_AUTO_SEND_CMD 0x20
 
 // General config 
-#define NUM_SAMPLES 16
+#define NUM_SAMPLES 8  // num of samples to average
 #define SUB_COMM_RETRIES 2
 #define MAX_RETRY_READS 2
 
 //Timer lenghts
-#define SAMPLE_PERIOD 2000
+#define SAMPLE_PERIOD 2000  // Amount of time each sample takes
 #define STOP_AUTO_WAIT_TIME 100
 #define WARMUP_WAIT_TIME 20000
 
@@ -110,7 +110,6 @@ static uint8_t numGoodReads = 0;
 ****************************************************************************/
 bool InitHPMService(uint8_t Priority)
 {
-  ES_Event_t ThisEvent;
   MyPriority = Priority;
 
   Serial1.begin(9600);
@@ -118,16 +117,7 @@ bool InitHPMService(uint8_t Priority)
     ;
   } 
 
-  ThisEvent.EventType = ES_READ_HPM;
-  ThisEvent.ServiceNum = Priority; 
-  if (ES_PostToService(ThisEvent) == true)
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  return true; 
 }
 
 /****************************************************************************
@@ -187,7 +177,7 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
   {
     case WAIT_START_STATE:
     {
-      if(ThisEvent.EventType == ES_READ_HPM)
+      if(ThisEvent.EventType == ES_READ_SENSOR)
       {
         #ifdef DEBUG_SENSOR
         printf("Starting\n");
@@ -219,7 +209,7 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
         ES_Event_t startCommEvent = {.EventType=COMMSM_SEND}; 
         Comm_StateMachine(startCommEvent, startMeasurements); 
         currStatusState = ACK_STATE; 
-        ES_Timer_InitTimer(HPM_TIMER_NUM, 2000);  // serves as a back-up in case lower SM gets stuck, should never have a timeout, make at least 3x comm timer len
+        ES_Timer_InitTimer(HPM_TIMER_NUM, 4000);  // serves as a back-up in case lower SM gets stuck, should never have a timeout, making 2x max comm timer len
       }
 
       break;
@@ -255,7 +245,7 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
     case WARMUP_STATE: 
     {
       if((ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == HPM_TIMER_NUM)
-        || ThisEvent.EventType == ES_READ_HPM)
+        || ThisEvent.EventType == ES_READ_SENSOR)
       {
         #ifdef DEBUG_SENSOR
         printf("2: ");
@@ -423,10 +413,13 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
           avgPM25 = 0.0; 
           avgPM10 = 0.0; 
         }
+        #ifdef DEBUG_SENSOR
         printf("HPM 2.5: %d\n", pm25Val);
         printf("HPM 10: %d\n", pm10Val); 
-        avgPM25 += (float)pm25Val / (float)NUM_SAMPLES; 
-        avgPM10 += (float)pm10Val / (float)NUM_SAMPLES; 
+        #endif
+
+        avgPM25 += (float)pm25Val; 
+        avgPM10 += (float)pm10Val; 
 
         checkSumVal = 0; 
         retryAttempts = 0; 
@@ -453,15 +446,20 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
           printf("Again: \n");
           #endif
           currStatusState = WARMUP_STATE;
-          ES_Event_t newEvent = {.EventType=ES_READ_HPM};
+          ES_Event_t newEvent = {.EventType=ES_READ_SENSOR};
           PostHPMService(newEvent);
         }
         else
         {
           currStatusState = WAIT_START_STATE;
           numGoodReads = 0; 
+          avgPM25 /= NUM_SAMPLES; 
+          avgPM10 /= NUM_SAMPLES; 
           printf("Avg PM 2.5: %f\n", avgPM25); 
           printf("Avg PM 10: %f\n", avgPM10); 
+          
+          updateHPMVal((int16_t)round(avgPM25), (int16_t)round(avgPM10));
+
           avgPM25 = 0.0; 
           avgPM10 = 0.0; 
           #ifdef DEBUG_SENSOR
@@ -503,8 +501,11 @@ bool EventCheckerHPM(){
 
 bool retryRead(uint8_t *retryAttempts, uint16_t *checkSumVal, bool skipWarmup)
 {
+  if(retryAttempts == NULL || checkSumVal == NULL)
+    return false; 
+
   *checkSumVal = 0; 
-  ES_Timer_StopTimer(HPM_TIMER_NUM);  // in case any timer is running
+  ES_Timer_StopTimer(HPM_TIMER_NUM);  // in case timer is still running
 
   if(skipWarmup)
     currStatusState = WARMUP_STATE;  // Fan has already started. No need to retry this
@@ -515,6 +516,7 @@ bool retryRead(uint8_t *retryAttempts, uint16_t *checkSumVal, bool skipWarmup)
   {
     numGoodReads = 0; 
     *retryAttempts = 0; 
+    updateHPMVal(-1, -1);
     printf("Could not read from HPM sensor\n");
     return false; 
   }
@@ -523,7 +525,7 @@ bool retryRead(uint8_t *retryAttempts, uint16_t *checkSumVal, bool skipWarmup)
   printf("Retrying: %d\n", *retryAttempts);
   #endif
   *retryAttempts = *retryAttempts + 1; 
-  ES_Event_t newEvent = {.EventType=ES_READ_HPM};
+  ES_Event_t newEvent = {.EventType=ES_READ_SENSOR};
   PostHPMService(newEvent);
   return true; 
 }
@@ -531,7 +533,7 @@ bool retryRead(uint8_t *retryAttempts, uint16_t *checkSumVal, bool skipWarmup)
 void clearSerial1Buffer()
 {
   if(Serial1.available())
-    printf("Cleared data\n");
+    printf("Cleared data HPM\n");
 
   while(Serial1.available())
   {
@@ -618,7 +620,7 @@ ES_Event_t Comm_StateMachine(ES_Event_t ThisEvent, void (*cmdFunc)())
         clearSerial1Buffer(); 
         cmdFunc(); 
         currCommSMState = ACK1_STATE; 
-        ES_Timer_InitTimer(COMMSM_TIMER_NUM, 500);
+        ES_Timer_InitTimer(COMMSM_TIMER_NUM, 500 * (0x01 << retryAttempts));
       }
       break;
     }
@@ -675,6 +677,9 @@ ES_Event_t Comm_StateMachine(ES_Event_t ThisEvent, void (*cmdFunc)())
 
 bool retryComm(uint8_t *retryAttempts, void (*cmdFunc)())
 {
+  if(retryAttempts == NULL || cmdFunc == NULL)
+    return false; 
+  
   currCommSMState = CMD_WAIT_START_STATE; 
   if(*retryAttempts >= SUB_COMM_RETRIES)
   {
@@ -687,6 +692,7 @@ bool retryComm(uint8_t *retryAttempts, void (*cmdFunc)())
   #ifdef DEBUG_SENSOR
   printf("Subcomm retry %d\n", *retryAttempts);
   #endif
+
   *retryAttempts = *retryAttempts + 1; 
   ES_Event_t newEvent = {.EventType=COMMSM_SEND};
   Comm_StateMachine(newEvent, cmdFunc);

@@ -127,7 +127,7 @@ ES_Event_t RunButtonService(ES_Event_t ThisEvent)
         ES_Event_t newEvent; 
         newEvent.EventType = ES_SW_BUTTON_PRESS; 
         newEvent.EventParam = SHORT_BT_PRESS;
-        Serial.printf("%lu\n", elapsed_time); 
+        // printf("%lu\n", elapsed_time); 
         PostMainService(newEvent); 
 
         currStatusState = START_SM_STATE; 
@@ -139,7 +139,7 @@ ES_Event_t RunButtonService(ES_Event_t ThisEvent)
         newEvent.EventType = ES_SW_BUTTON_PRESS; 
         newEvent.EventParam = LONG_BT_PRESS;
         PostMainService(newEvent); 
-        Serial.printf("%lu\n", elapsed_time); 
+        // Sprintf("%lu\n", elapsed_time); 
 
         currStatusState = START_SM_STATE; 
         timeStamp = millis(); 
