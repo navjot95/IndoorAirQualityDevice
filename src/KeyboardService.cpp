@@ -42,24 +42,9 @@ static uint8_t MyPriority;
 ****************************************************************************/
 bool InitKeyboardService(uint8_t Priority)
 {
-  ES_Event_t ThisEvent;
-
   MyPriority = Priority;
-  
-  Serial.begin(BAUD_RATE); 
-  while(!Serial){;}
 
-  // post the initial transition event
-  ThisEvent.EventType = ES_INIT;
-  ThisEvent.ServiceNum = Priority; 
-  if (ES_PostToService(ThisEvent) == true)
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  return true; 
 }
 
 /****************************************************************************

@@ -1,16 +1,15 @@
 /****************************************************************************
 
-  Header file for template service
+  Header file for ePaper driver
 
  ****************************************************************************/
 
-#ifndef EPaperServ_H
-#define EPaperServ_H
+#ifndef EPaperDrv_H
+#define EPaperDrv_H
 
-#include "ES_Event.h"
+#include "IAQ_util.h"
 #include <stdbool.h>
 #include <stdint.h>
-
 
 typedef struct IAQsensorVals
 {
@@ -23,15 +22,12 @@ typedef struct IAQsensorVals
   int16_t rh;
 }IAQsensorVals_t;
 
-
-// Public Function Prototypes
-bool InitePaperService(uint8_t Priority);
-bool PostePaperService(ES_Event_t ThisEvent);
-ES_Event_t RunePaperService(ES_Event_t ThisEvent);
-
-void updateScreenSensorVals(IAQsensorVals_t newVals);
+bool initePaper(); 
+void updateScreenSensorVals(IAQsensorVals_t *newVals, bool forceFullRefresh);
 void ePaperPrintfAlert(const char * title, const char * line1, const char * line2); 
 void ePaperChangeHdln(const char *txt, bool updateScrn);
+void ePaperChangeMode(IAQmode_t currMode);
+bool updateEpaperTime();  // TODO: Don't think this needs to be a public function
 
-#endif /* EPaperServ_H */
+#endif /* EPaperDrv_H */
 

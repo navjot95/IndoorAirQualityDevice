@@ -17,8 +17,6 @@
 #define BUTTON_PIN 26
 #define PWR_EN_PIN 12
 #define TIMER_TEST_PIN 4
-#define BAT_PIN A13
-
 #define BAUD_RATE 115200
 
 #define SHORT_BT_PRESS 0
@@ -44,7 +42,10 @@ typedef enum
   ES_SW_BUTTON_PRESS,          /* short button press (0) and long button press (1)*/
   ES_READ_SENSOR,               /* command to send to sensor to read its value(s) */
   COMMSM_SEND,
-  UPDATES_DONE_EVENT
+  SENSORS_READ_EVENT,
+  WIFI_CONNECT,
+  CLOUD_PUBLISH, 
+  CLOUD_UPDATED_EVENT
 }ES_EventType_t;
 
 
@@ -70,7 +71,7 @@ typedef enum
 #define TIMER3_RESP_FUNC PostMainService
 #define TIMER4_RESP_FUNC PostSVM30Service
 #define TIMER5_RESP_FUNC PostSVM30Service
-#define TIMER6_RESP_FUNC TIMER_UNUSED
+#define TIMER6_RESP_FUNC PostCloudService
 #define TIMER7_RESP_FUNC TIMER_UNUSED
 #define TIMER8_RESP_FUNC TIMER_UNUSED
 #define TIMER9_RESP_FUNC TIMER_UNUSED
@@ -87,6 +88,7 @@ typedef enum
 #define MAIN_SERV_TIMER_NUM 3
 #define SVM30_TIMER_NUM 4
 #define SVM30_TIMER2_NUM 5
+#define WIFI_TIMER_NUM 6
 
 
 /********************************Services********************************************/
@@ -190,11 +192,11 @@ typedef enum
 // These are the definitions for Service 6
 #if NUM_SERVICES > 6
 // the header file with the public function prototypes
-#define SERV_6_HEADER "ePaperService.h"
+#define SERV_6_HEADER "SVM30Service.h"
 // the name of the Init function
-#define SERV_6_INIT InitePaperService
+#define SERV_6_INIT InitSVM30Service
 // the name of the run function
-#define SERV_6_RUN RunePaperService
+#define SERV_6_RUN RunSVM30Service
 // How big should this services Queue be?
 #define SERV_6_QUEUE_SIZE 3
 #endif
@@ -203,11 +205,11 @@ typedef enum
 // These are the definitions for Service 7
 #if NUM_SERVICES > 7
 // the header file with the public function prototypes
-#define SERV_7_HEADER "SVM30Service.h"
+#define SERV_7_HEADER "CloudService.h"
 // the name of the Init function
-#define SERV_7_INIT InitSVM30Service
+#define SERV_7_INIT InitCloudService
 // the name of the run function
-#define SERV_7_RUN RunSVM30Service
+#define SERV_7_RUN RunCloudService
 // How big should this services Queue be?
 #define SERV_7_QUEUE_SIZE 3
 #endif

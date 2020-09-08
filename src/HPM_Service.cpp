@@ -43,9 +43,7 @@ typedef enum{
   STOP_AUTO_FUNC
 } HPMCommandFunc_t; 
 
-
 // #define DEBUG_SENSOR
-
 
 #define SEND_BYTE_HEAD 0x68
 #define RECEIVE_BYTE_HEAD 0x40
@@ -64,7 +62,7 @@ typedef enum{
 #define STOP_AUTO_SEND_CMD 0x20
 
 // General config 
-#define NUM_SAMPLES 8  // num of samples to average
+#define RUN_AVG_BUFFER_LEN 8  // size of running average buffer MAX VALUE: 255
 #define SUB_COMM_RETRIES 2
 #define MAX_RETRY_READS 2
 
@@ -72,7 +70,15 @@ typedef enum{
 #define SAMPLE_PERIOD 2000  // Amount of time each sample takes
 #define STOP_AUTO_WAIT_TIME 100
 #define WARMUP_WAIT_TIME 20000
+#define PM_MAX_VALUE 1000
 
+
+typedef struct
+{
+    uint32_t runAvgSum;
+    uint16_t buff[RUN_AVG_BUFFER_LEN]; 
+    uint8_t oldestIdx;  
+}runAvg_t; 
 
 /*---------------------------- Module Functions ---------------------------*/
 bool retryRead(uint8_t *retryAttempts, uint16_t *checkSumVal, bool skipWarmup);
@@ -80,17 +86,21 @@ void clearSerial1Buffer();
 uint16_t getChecksum(uint16_t summedVals);
 void readPMSensor(); 
 void stopAutoSend();
-void stopMeasurements(); 
 void startMeasurements();
 ES_Event_t Comm_StateMachine(ES_Event_t ThisEvent, void (*cmdFunc)());
 bool retryComm(uint8_t *retryAttempts, void (*cmdFunc)());
+void updateRunAvg(runAvg_t *runAvgValues, uint16_t newSensorVal);
 
 
 /*---------------------------- Module Variables ---------------------------*/
 static uint8_t MyPriority;
 static statusState_t currStatusState = WAIT_START_STATE;
 static commSMStatus_t currCommSMState = CMD_WAIT_START_STATE; 
-static uint8_t numGoodReads = 0;
+static uint8_t numGoodReads = 0;  // would need to reset
+static runAvg_t pm10RunAvg = {.runAvgSum=0, .buff={0}, .oldestIdx=0};
+static runAvg_t pm25RunAvg = {.runAvgSum=0, .buff={0}, .oldestIdx=0};
+static bool sensorConnected = false; 
+static IAQmode_t HPM_mode = AUTO_MODE; 
 
 /*------------------------------ Module Code ------------------------------*/
 /****************************************************************************
@@ -111,6 +121,9 @@ static uint8_t numGoodReads = 0;
 bool InitHPMService(uint8_t Priority)
 {
   MyPriority = Priority;
+
+  memset(pm10RunAvg.buff, 0, sizeof(pm10RunAvg.buff));
+  memset(pm25RunAvg.buff, 0, sizeof(pm25RunAvg.buff));
 
   Serial1.begin(9600);
   while (!Serial1) {
@@ -159,11 +172,9 @@ bool PostHPMService(ES_Event_t ThisEvent)
 ES_Event_t RunHPMService(ES_Event_t ThisEvent)
 {
   // Serial.printf("HPM event: %d %d\n", ThisEvent.EventType, ThisEvent.EventParam);
-  ES_Event_t ReturnEvent;
-  ReturnEvent.EventType = ES_NO_EVENT; // assume no errors
+  ES_Event_t ReturnEvent = {.EventType=ES_NO_EVENT};  // asume no errors
   static uint8_t retryAttempts = 0; 
   static uint16_t pm25Val, pm10Val = 0; 
-  static float avgPM25, avgPM10 = 0.0; 
   static uint16_t checkSumVal = 0; 
 
   #ifdef DEBUG_SENSOR
@@ -209,7 +220,7 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
         ES_Event_t startCommEvent = {.EventType=COMMSM_SEND}; 
         Comm_StateMachine(startCommEvent, startMeasurements); 
         currStatusState = ACK_STATE; 
-        ES_Timer_InitTimer(HPM_TIMER_NUM, 4000);  // serves as a back-up in case lower SM gets stuck, should never have a timeout, making 2x max comm timer len
+        ES_Timer_InitTimer(HPM_TIMER_NUM, 4000);  // serves as a back-up in case lower SM gets stuck, should never have a timeout, make 2x max comm timer len
       }
 
       break;
@@ -408,18 +419,20 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
     {
       if(ThisEvent.EventType == ES_SERIAL1 && ThisEvent.EventParam == getChecksum(checkSumVal))
       {
-        if(numGoodReads == 0)
-        {
-          avgPM25 = 0.0; 
-          avgPM10 = 0.0; 
-        }
+        sensorConnected = true; 
         #ifdef DEBUG_SENSOR
         printf("HPM 2.5: %d\n", pm25Val);
         printf("HPM 10: %d\n", pm10Val); 
         #endif
 
-        avgPM25 += (float)pm25Val; 
-        avgPM10 += (float)pm10Val; 
+        // in case sensor malfunctions 
+        if(pm10Val > PM_MAX_VALUE)
+          pm10Val = PM_MAX_VALUE; 
+        if(pm25Val > PM_MAX_VALUE)
+          pm25Val = PM_MAX_VALUE; 
+
+        updateRunAvg(&pm10RunAvg, pm10Val); 
+        updateRunAvg(&pm25RunAvg, pm25Val); 
 
         checkSumVal = 0; 
         retryAttempts = 0; 
@@ -438,9 +451,12 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
     {
       if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == HPM_TIMER_NUM)
       {
+        if(HPM_mode == STREAM_MODE)
+          numGoodReads = 0; 
+        else
+          numGoodReads++; 
 
-        numGoodReads++; 
-        if(numGoodReads < NUM_SAMPLES)
+        if(numGoodReads < RUN_AVG_BUFFER_LEN)  // TODO: maybe make RUN_AVG_BUFFER_LEN to 16 so first 8 reads are discarded 
         {
           #ifdef DEBUG_SENSOR
           printf("Again: \n");
@@ -453,22 +469,21 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
         {
           currStatusState = WAIT_START_STATE;
           numGoodReads = 0; 
-          avgPM25 /= NUM_SAMPLES; 
-          avgPM10 /= NUM_SAMPLES; 
-          printf("Avg PM 2.5: %f\n", avgPM25); 
-          printf("Avg PM 10: %f\n", avgPM10); 
-          
-          updateHPMVal((int16_t)round(avgPM25), (int16_t)round(avgPM10));
+          int16_t avgPM10 =  round((float)pm10RunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
+          int16_t avgPM25  = round((float)pm25RunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
 
-          avgPM25 = 0.0; 
-          avgPM10 = 0.0; 
+          printf("Avg PM 10: %d, sum: %d\n", avgPM10, pm10RunAvg.runAvgSum); 
+          printf("Avg PM 2.5: %d, sum: %d\n", avgPM25, pm25RunAvg.runAvgSum); 
+          
+          updateHPMVal(avgPM25, avgPM10);
+
           #ifdef DEBUG_SENSOR
           printf("Done reading\n");
           #endif
 
           //stop the fan now
           ES_Event_t startCommEvent = {.EventType=COMMSM_SEND}; 
-          Comm_StateMachine(startCommEvent, stopMeasurements); 
+          Comm_StateMachine(startCommEvent, stopHPMMeasurements); 
         }
       }
       break;
@@ -493,6 +508,28 @@ bool EventCheckerHPM(){
   return false; 
 }
 
+void getPMAvg(int16_t *pm10Avg, int16_t *pm25Avg)
+{
+  if(sensorConnected)
+  {
+    *pm10Avg = round((float)pm10RunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
+    *pm25Avg = round((float)pm25RunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
+  }
+  else
+  {
+    *pm10Avg = -1; 
+    *pm25Avg = -1; 
+  }
+
+  printf("pm10 run avg: %d\n", *pm10Avg); 
+  printf("pm25 run avg: %d\n", *pm25Avg);
+}
+
+
+void HPMsetMode(IAQmode_t newMode)
+{
+  HPM_mode = newMode; 
+}
 
 
 /***************************************************************************
@@ -503,6 +540,12 @@ bool retryRead(uint8_t *retryAttempts, uint16_t *checkSumVal, bool skipWarmup)
 {
   if(retryAttempts == NULL || checkSumVal == NULL)
     return false; 
+
+  sensorConnected = false; 
+  if(HPM_mode == STREAM_MODE)
+  {
+    *retryAttempts = 0;  // in stream mode don't need to stop trying
+  }
 
   *checkSumVal = 0; 
   ES_Timer_StopTimer(HPM_TIMER_NUM);  // in case timer is still running
@@ -530,6 +573,20 @@ bool retryRead(uint8_t *retryAttempts, uint16_t *checkSumVal, bool skipWarmup)
   return true; 
 }
 
+void updateRunAvg(runAvg_t *runAvgValues, uint16_t newSensorVal)
+{
+  runAvgValues->runAvgSum += newSensorVal;
+  runAvgValues->runAvgSum -= runAvgValues->buff[runAvgValues->oldestIdx]; 
+  runAvgValues->buff[runAvgValues->oldestIdx] = newSensorVal; 
+  (runAvgValues->oldestIdx)++; 
+  (runAvgValues->oldestIdx) %= RUN_AVG_BUFFER_LEN; 
+
+  int32_t temp = round((float)runAvgValues->runAvgSum / RUN_AVG_BUFFER_LEN); 
+  printf("New val: %d  ", newSensorVal);
+  printf("Running avg: %d\n", temp); 
+}
+
+
 void clearSerial1Buffer()
 {
   if(Serial1.available())
@@ -537,7 +594,7 @@ void clearSerial1Buffer()
 
   while(Serial1.available())
   {
-    Serial1.read(); 
+    printf("%x", Serial1.read()); 
   }
 }
 
@@ -552,7 +609,7 @@ void stopAutoSend()
   Serial1.write(0x77);  // Checksum 
 }
 
-void stopMeasurements()
+void stopHPMMeasurements()
 {
   #ifdef DEBUG_SENSOR
   printf("Stopping measurements\n");

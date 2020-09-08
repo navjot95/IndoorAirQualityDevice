@@ -1,7 +1,5 @@
 
 #include "ES_framework.h"
-// #include <InfluxDbClient.h>
-// #include <InfluxDbCloud.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <Arduino.h>

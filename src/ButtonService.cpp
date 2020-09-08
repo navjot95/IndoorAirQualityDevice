@@ -51,20 +51,9 @@ static statusState_t currStatusState = START_SM_STATE;
 ****************************************************************************/
 bool InitButtonService(uint8_t Priority)
 {
-  ES_Event_t ThisEvent;
   MyPriority = Priority;
 
-  // post the initial transition event
-  ThisEvent.EventType = ES_INIT;
-  ThisEvent.ServiceNum = Priority; 
-  if (ES_PostToService(ThisEvent) == true)
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  return true; 
 }
 
 /****************************************************************************

@@ -184,7 +184,6 @@ ES_Return_t ES_Run(void)
    posts to all of the services' queues
  Notes
 ****************************************************************************/
-// TODO: IMPLEMENT THIS 
 // bool ES_PostAll(ES_Event_t ThisEvent)  
 // {
 //   // add the new event to the queue

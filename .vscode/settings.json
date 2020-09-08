@@ -7,6 +7,10 @@
         "vector": "cpp",
         "system_error": "cpp",
         "cmath": "cpp",
-        "algorithm": "cpp"
+        "algorithm": "cpp",
+        "fstream": "cpp",
+        "functional": "cpp",
+        "istream": "cpp",
+        "tuple": "cpp"
     }
 }

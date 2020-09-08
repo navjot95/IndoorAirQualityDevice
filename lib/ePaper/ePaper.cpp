@@ -28,8 +28,8 @@
 #include "ePaper.h"
 
 
-#define MAX_PARTIAL_REFRESHES 5  // max number of continuous partial refreshes before doing a full refresh
-RTC_DATA_ATTR static uint8_t refreshCounter = 0; 
+#define PARTIAL_REFRESH_LIMIT 4  // full refresh every this many refreshes, otherwise partial refresh
+RTC_DATA_ATTR static uint8_t refreshCounter = 1; 
 
 static const uint8_t lut_full_update[] = {
     0x50, 0xAA, 0x55, 0xAA, 0x11, 0x00,
@@ -210,6 +210,7 @@ void Epd::DisplayFrame(const uint8_t* img) {
         }
     }
     TurnOnDisplay();
+    Sleep(); 
 }
 
 /**
@@ -327,15 +328,13 @@ int8_t Epd::printf(const char *strToPrint, font_t *scrnFont, uint16_t xPos, uint
             idx++; 
             continue; 
         }
-
-        copyCharToBuffer(strToPrint[idx], xCursor, yCursor, scrnFont);
         uint16_t charWidth = getCharWidth(strToPrint[idx], scrnFont); 
-        yCursor += charWidth + scrnFont->spaceWidth; 
         // Serial.printf("%c is %i wide\n", strToPrint[idx], charWidth); 
         // Serial.printf("yCursor: %i\n", yCursor);
         if((yCursor + charWidth) > SCREEN_HEIGHT)
             return -2;  // not enough space for this char
-
+        copyCharToBuffer(strToPrint[idx], xCursor, yCursor, scrnFont);
+        yCursor += charWidth + scrnFont->spaceWidth; 
         idx++;         
     }
     return 1; 
@@ -346,15 +345,15 @@ void Epd::updateScreen(bool forceFullRefresh)
 {
     if(forceFullRefresh)
     {
-        refreshCounter = 0; 
+        refreshCounter = PARTIAL_REFRESH_LIMIT; 
     }
     
-    if(refreshCounter % (MAX_PARTIAL_REFRESHES+1) == 0)
+    if(refreshCounter % PARTIAL_REFRESH_LIMIT == 0)
     {
         refreshCounter = 0; 
         ChangeRefreshMode(false); 
     }
-    else if(refreshCounter % (MAX_PARTIAL_REFRESHES+1) == 1)
+    else if(refreshCounter % PARTIAL_REFRESH_LIMIT == 1)
     {
         ChangeRefreshMode(true); 
     }

@@ -1,28 +1,29 @@
 /****************************************************************************
  Module
-   ePaperService.c
+   ePaperDriver.c
 
  Description
-   Implements to firmware for the ePaper.
+   Implements firmware for the higher level driver ePaper.
 
  Notes
 ****************************************************************************/
 /*----------------------------- Include Files -----------------------------*/
 
-#include "ePaperService.h"
-#include "ES_framework.h"
+#include "ePaperDriver.h"
 #include "ePaper.h"
+#include "ES_Configure.h"
 #include "UI_Display.h"
-// #include <SPI.h>
+#include "IAQ_util.h"
 
 /*----------------------------- Module Defines ----------------------------*/
 
-#define TRH_Y_START 125
+#define TRH_Y_START 130
 #define TRH_Y_LEN 120
 
 #define SENSOR_Y_OFFSET 15
-#define SENSOR_VAL_X_POS 35
-#define SENSOR_LABEL_X_POS 70
+#define SENSOR_VAL_X_POS 31
+#define SENSOR_LABEL_X_POS 68
+#define SENSOR_VAL_TXT_LEN 42
 
 #define BAT_EXTRA_LEN 6
 #define MAX_BAT_LEVEL 100 
@@ -37,6 +38,7 @@
 #define HDLN_X_OFFSET (SCREEN_WIDTH - calibri_12ptFont.charHeight) 
 #define HDLN2_Y_START 150
 
+
 typedef struct _sensor
 {
   const char *name; 
@@ -46,6 +48,7 @@ typedef struct _sensor
   uint16_t medThresh;  // cutoff for low/med/high label 
   uint16_t highThresh; // cutoff for low/med/high label 
   uint16_t yCord_start; // when screen is horizontal, this is where left side starts
+  int16_t currAltVal;  // optional value to display additional reading  
   int16_t currValue; 
 } sensor_t;
 
@@ -54,14 +57,12 @@ typedef struct _sensor
 void setupHeader();
 void displaySensor(sensor_t *thisSensor);
 void updateBatLevel(uint8_t batLevel); 
-void updateSensorVal(sensor_t *thisSensor, int16_t newVal);
-uint8_t textVal(sensor_t *thisSensor, uint16_t valToCalc);
+void updateSensorVal(sensor_t *thisSensor, int16_t newVal, int16_t newAltVal);
+uint8_t textVal(sensor_t *thisSensor, int16_t valToCalc);
 void updateTempRH(int16_t temp, int16_t rh);
-uint8_t convertBatVToPerct(uint16_t batV);
 
 
 /*---------------------------- Module Variables ---------------------------*/
-static uint8_t MyPriority;
 Epd epd = Epd(); 
 
 static sensor_t eCO2 = 
@@ -73,7 +74,8 @@ static sensor_t eCO2 =
     .medThresh = 700, 
     .highThresh = 1000, 
     .yCord_start = 5,
-    .currValue = 0
+    .currAltVal = -2,
+    .currValue = -1
   };
 
 static sensor_t tVOC = 
@@ -84,33 +86,23 @@ static sensor_t tVOC =
     .max_value = 1000, 
     .medThresh = 100, 
     .highThresh = 250, 
-    .yCord_start = 80,
-    .currValue = 0
+    .yCord_start = 73,
+    .currAltVal = -2,
+    .currValue = -1
   };
 
 static sensor_t pm25 = 
   {
-    .name = "PM2.5", 
-    .units = "ug/m^3",
+    .name = "PM10/2.5", 
+    .units = "ug/m3",
     .min_value = 0,
     .max_value = 250, 
     .medThresh = 25, 
     .highThresh = 50, 
-    .yCord_start = 155,
-    .currValue = 0 
+    .yCord_start = 140,
+    .currAltVal = -1,
+    .currValue = -1 
   };
-
-// static sensor_t pm10 = 
-//   {
-//     .name = "PM10.0", 
-//     .units = "ug/m^3",
-//     .min_value = 0,
-//     .max_value = 1000, 
-//     .medThresh = 50, 
-//     .highThresh = 150, 
-//     .yCord_start = 155,
-//     .currValue = 0 
-//   };
 
 static sensor_t CO2 = 
   {
@@ -118,10 +110,11 @@ static sensor_t CO2 =
     .units = "ppm",
     .min_value = 0,
     .max_value = 2000, 
-    .medThresh = 700, 
+    .medThresh = 710, 
     .highThresh = 1000, 
-    .yCord_start = 230,
-    .currValue = 0 
+    .yCord_start = 235,
+    .currAltVal = -2,
+    .currValue = -1 
   };
 
 
@@ -129,95 +122,47 @@ static sensor_t CO2 =
 /*------------------------------ Module Code ------------------------------*/
 /****************************************************************************
  Function
-     InitePaperService
+     initePaper
 
  Parameters
-     uint8_t : the priorty of this service
 
  Returns
      bool, false if error in initialization, true otherwise
 
- Description
-     Saves away the priority, and initializes the hw for the screen
- Notes
 ****************************************************************************/
-bool InitePaperService(uint8_t Priority)
+bool initePaper()
 {
-  // ES_Event_t ThisEvent;
-  MyPriority = Priority;
- 
-
   if (epd.Init() != 0) {
       printf("e-Paper init failed");
       return false;
   }
 
+  // if(rtc_get_reset_reason(0) == PWR_RESET)
+  // {
   epd.clearBuffer(); 
   displaySensor(&eCO2); 
   displaySensor(&tVOC); 
   displaySensor(&pm25); 
   displaySensor(&CO2);
-  setupHeader();  
+  setupHeader();
+  // }
 
   return true; 
 }
 
-/****************************************************************************
- Function
-     PostePaperService
 
- Parameters
-     EF_Event_t ThisEvent ,the event to post to the queue
-
- Returns
-     bool false if the Enqueue operation failed, true otherwise
-
- Description
-     Posts an event to this state machine's queue
- Notes
-****************************************************************************/
-bool PostePaperService(ES_Event_t ThisEvent)
+void updateScreenSensorVals(IAQsensorVals_t *newVals, bool forceFullRefresh)
 {
-  ThisEvent.ServiceNum = MyPriority; 
-  return ES_PostToService(ThisEvent);
-}
+  updateSensorVal(&eCO2, newVals->eCO2, -2); 
+  updateSensorVal(&tVOC, newVals->tVOC, -2); 
+  updateSensorVal(&pm25, newVals->PM25, newVals->PM10);
+  updateSensorVal(&CO2, newVals->CO2, -2); 
+  updateTempRH(newVals->temp, newVals->rh); 
+  epd.drawRect(HDLN_X_OFFSET - calibri_12ptFont.charHeight, HDLN2_Y_START, calibri_12ptFont.charHeight, 100, false);  // clear out any headline 2 text
 
-/****************************************************************************
- Function
-    RunePaperService
-
- Parameters
-   ES_Event_t : the event to process
-
- Returns
-   ES_Event, ES_NO_EVENT if no error ES_ERROR otherwise
-
- Notes
-****************************************************************************/
-ES_Event_t RunePaperService(ES_Event_t ThisEvent)
-{
-  ES_Event_t ReturnEvent;
-  ReturnEvent.EventType = ES_NO_EVENT; // assume no errors
-  
-
-  return ReturnEvent;
-}
-
-
-void updateScreenSensorVals(IAQsensorVals_t newVals)
-{
-  updateSensorVal(&eCO2, newVals.eCO2); 
-  updateSensorVal(&tVOC, newVals.tVOC); 
-  updateSensorVal(&pm25, newVals.PM25); 
-  updateSensorVal(&CO2, newVals.CO2); 
-  updateTempRH(newVals.temp, newVals.rh); 
-  epd.drawRect(HDLN_X_OFFSET - calibri_12ptFont.charHeight, HDLN2_Y_START, calibri_12ptFont.charHeight, SCREEN_HEIGHT-HDLN2_Y_START, false);  // clear out any headline 2 text
-
-  uint16_t batV = analogRead(BAT_PIN) * 2; 
-  printf("BatV: %d\n", batV); 
-  updateBatLevel(convertBatVToPerct(batV)); 
-
-  epd.updateScreen(false); 
+  updateBatLevel(getBatPerct()); 
+  updateEpaperTime(); 
+  epd.updateScreen(forceFullRefresh); 
 }
 
 void ePaperPrintfAlert(const char * title, const char * line1, const char * line2)
@@ -227,15 +172,66 @@ void ePaperPrintfAlert(const char * title, const char * line1, const char * line
   epd.printf(title, &calibri_18ptFont, 70, 65); 
   epd.printf(line1, &calibri_12ptFont, 50, 65);
   epd.printf(line2, &calibri_12ptFont, 34, 65);
+  updateBatLevel(getBatPerct()); 
   epd.updateScreen(true); 
 }
 
 void ePaperChangeHdln(const char *txt, bool updateScrn)
 {
-  epd.drawRect(HDLN_X_OFFSET - calibri_12ptFont.charHeight, HDLN2_Y_START, calibri_12ptFont.charHeight, SCREEN_HEIGHT-HDLN2_Y_START, false);  // clear out any prev text
+  epd.drawRect(HDLN_X_OFFSET - calibri_12ptFont.charHeight, HDLN2_Y_START, calibri_12ptFont.charHeight, 100, false);  // clear out any prev text
   epd.printf(txt, &calibri_12ptFont, HDLN_X_OFFSET - calibri_12ptFont.charHeight,HDLN2_Y_START);
+  updateBatLevel(getBatPerct()); 
+
   if(updateScrn)
     epd.updateScreen(false);
+  
+}
+
+void ePaperChangeMode(IAQmode_t currMode)
+{
+  epd.drawRect(HDLN_X_OFFSET-calibri_10ptFont.charHeight, SCREEN_HEIGHT-40, calibri_10ptFont.charHeight, 40, false); 
+
+  if(currMode == NO_MODE)
+  {
+    return; 
+  }else if(currMode == STREAM_MODE)
+  {
+    epd.printf("Stream", &calibri_10ptFont, HDLN_X_OFFSET-calibri_10ptFont.charHeight, SCREEN_HEIGHT-40);
+  }
+  else
+  {
+    epd.printf("Auto", &calibri_10ptFont, HDLN_X_OFFSET-calibri_10ptFont.charHeight, SCREEN_HEIGHT-28);
+  }
+  
+}
+
+
+bool updateEpaperTime()
+{
+  bool returnVal; 
+  time_t now;
+  struct tm tmInfo;
+  time(&now);
+  localtime_r(&now, &tmInfo);
+
+  uint8_t hr = (tmInfo.tm_hour % 12) ? (tmInfo.tm_hour % 12) : 12; 
+  const char *dn = (tmInfo.tm_hour < 12) ? "AM" : "PM"; 
+  char str[20]; 
+  if(tmInfo.tm_year > (2019-1900))
+  {
+    returnVal = true; 
+    sprintf(str, "%d/%d %d:%02d %s", tmInfo.tm_mon+1, tmInfo.tm_mday, hr, tmInfo.tm_min, dn);
+  }
+  else 
+  {
+    printf("Could not update time\n");
+    returnVal = false; 
+    sprintf(str, "00/00 00:00 AM");
+  }
+
+  epd.drawRect(HDLN_X_OFFSET - calibri_12ptFont.charHeight, 0, calibri_12ptFont.charHeight, 110, false); 
+  epd.printf(str, &calibri_12ptFont, HDLN_X_OFFSET - calibri_12ptFont.charHeight,0);
+  return returnVal; 
 }
 
 
@@ -244,15 +240,14 @@ void ePaperChangeHdln(const char *txt, bool updateScrn)
  ***************************************************************************/
 void setupHeader()
 {
-  char headline1[] = "Updated:           000F 000%RH       A";
-  char headline2[] = "00/00 00:00AM";
+  char headline1[] = "Updated:";
+  char headline2[] = "00/00 00:00AM"; 
   epd.printf(headline1, &calibri_12ptFont, HDLN_X_OFFSET, 0);
   epd.printf(headline2, &calibri_12ptFont, HDLN_X_OFFSET - calibri_12ptFont.charHeight,0);
 
   epd.showImg(emptybatteryBitmaps, SCREEN_WIDTH-emptybatteryWidthPixels, SCREEN_HEIGHT-emptybatteryHeightPixels, emptybatteryWidthPixels, emptybatteryHeightPixels);  // draw battery body
   // epd.drawRect(SCREEN_WIDTH-emptybatteryWidthPixels+BAT_X_OFFSET, SCREEN_HEIGHT-emptybatteryHeightPixels+BAT_Y_OFFSET, BAT_WIDTH, 18, true); // make battery full
-  uint16_t batV = analogRead(BAT_PIN) * 2; 
-  updateBatLevel(convertBatVToPerct(batV)); 
+  updateBatLevel(getBatPerct()); 
 } 
 
 
@@ -266,40 +261,21 @@ void displaySensor(sensor_t *thisSensor)
 
   char sensorVal[] = "0000"; 
   epd.printf(sensorVal, &calibri_14ptFont, SENSOR_VAL_X_POS, thisSensor->yCord_start + SENSOR_Y_OFFSET); 
+  if(thisSensor->currAltVal != -2)
+  {
+    epd.printf(sensorVal, &calibri_14ptFont, SENSOR_VAL_X_POS+calibri_14ptFont.charHeight, thisSensor->yCord_start + SENSOR_Y_OFFSET);
+  }
 
-  epd.printf(thisSensor->units, &calibri_10ptFont, 25, thisSensor->yCord_start + SENSOR_Y_OFFSET);
+  epd.printf(thisSensor->units, &calibri_10ptFont, 20, thisSensor->yCord_start + SENSOR_Y_OFFSET);
   epd.printf(thisSensor->name, &calibri_12ptFont, 0, thisSensor->yCord_start + SENSOR_Y_OFFSET); 
 
-  return; 
-}
-
-uint8_t convertBatVToPerct(uint16_t batV)
-{
-  if(batV < 3600)
+  if(strcmp(thisSensor->name, "PM10/2.5") == 0)
   {
-    return 5; 
-  } else if (batV < 3700)
-  {
-    return 10; 
-  } else if (batV < 3800)
-  {
-    return 30; 
-  } else if (batV < 3900)
-  {
-    return 60; 
-  } else if (batV < 4000)
-  {
-    return 70; 
-  } else if (batV < 4100)
-  {
-    return 85; 
-  } else if (batV < 4200)
-  {
-    return 95; 
-  } else 
-  {
-    return 100; 
+    // manually adding labels for PM10 and PM2.5
+    epd.printf("PM10", &calibri_10ptFont, 2+SENSOR_VAL_X_POS+calibri_14ptFont.charHeight, thisSensor->yCord_start + SENSOR_Y_OFFSET+SENSOR_VAL_TXT_LEN);
+    epd.printf("PM2.5", &calibri_10ptFont, 2+SENSOR_VAL_X_POS, thisSensor->yCord_start + SENSOR_Y_OFFSET+SENSOR_VAL_TXT_LEN);
   }
+  return; 
 }
 
 
@@ -314,7 +290,7 @@ void updateBatLevel(uint8_t batLevel)
   epd.drawRect(SCREEN_WIDTH-emptybatteryWidthPixels+BAT_X_OFFSET, SCREEN_HEIGHT-emptybatteryHeightPixels+BAT_Y_OFFSET+yLen, BAT_WIDTH, MAX_BAT_HEIGHT-yLen, false); 
 }
 
-void updateSensorVal(sensor_t *thisSensor, int16_t newVal)
+void updateSensorVal(sensor_t *thisSensor, int16_t newVal, int16_t newAltVal)
 {
   int16_t oldVal = thisSensor->currValue; 
   if(newVal == oldVal)
@@ -331,10 +307,19 @@ void updateSensorVal(sensor_t *thisSensor, int16_t newVal)
   {
     sprintf(sensorVal, "%i", newVal);  
   }
-  
-  //redraw the bar
-  epd.drawRect(SENSOR_VAL_X_POS, thisSensor->yCord_start + SENSOR_Y_OFFSET, calibri_14ptFont.charHeight, 50, false);  // clear out previous text
+  epd.drawRect(SENSOR_VAL_X_POS, thisSensor->yCord_start + SENSOR_Y_OFFSET, calibri_14ptFont.charHeight, SENSOR_VAL_TXT_LEN, false);  // clear out previous text
   epd.printf(sensorVal, &calibri_14ptFont, SENSOR_VAL_X_POS, thisSensor->yCord_start + SENSOR_Y_OFFSET); 
+  // redraw alt value if provided
+  if(newAltVal != -2 && newAltVal != thisSensor->currAltVal)
+  {
+    if(newAltVal == -1)
+      sprintf(sensorVal, "0000");
+    else
+      sprintf(sensorVal, "%i", newAltVal);
+    epd.drawRect(SENSOR_VAL_X_POS+calibri_14ptFont.charHeight, thisSensor->yCord_start + SENSOR_Y_OFFSET, calibri_14ptFont.charHeight, SENSOR_VAL_TXT_LEN, false);  // clear out previous text
+    epd.printf(sensorVal, &calibri_14ptFont, SENSOR_VAL_X_POS+calibri_14ptFont.charHeight, thisSensor->yCord_start + SENSOR_Y_OFFSET); 
+    thisSensor->currAltVal = newAltVal; 
+  }
 
   // set caps for the bar in case sensor val is higher than bar max value
   if(newVal > thisSensor->max_value)
@@ -342,6 +327,7 @@ void updateSensorVal(sensor_t *thisSensor, int16_t newVal)
   else if(newVal < thisSensor->min_value)
     newVal = thisSensor->min_value; 
 
+  //redraw the bar
   uint16_t bar_h = map(newVal, thisSensor->min_value, thisSensor->max_value, 1, BAR_HEIGHT-1); 
   uint16_t bar_h_old = map(oldVal, thisSensor->min_value, thisSensor->max_value, 1, BAR_HEIGHT-1);  
   if(newVal > oldVal)
@@ -372,7 +358,7 @@ void updateSensorVal(sensor_t *thisSensor, int16_t newVal)
 }
 
 // returns values 1, 2, 3 depending on if display text for valToCal should be "Low", "Med", or "High"
-uint8_t textVal(sensor_t *thisSensor, uint16_t valToCalc)
+uint8_t textVal(sensor_t *thisSensor, int16_t valToCalc)
 {
   if(valToCalc < thisSensor->medThresh)
     return 1; 

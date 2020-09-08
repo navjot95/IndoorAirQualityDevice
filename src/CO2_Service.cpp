@@ -219,7 +219,7 @@ ES_Event_t RunCO2Service(ES_Event_t ThisEvent)
         if(ThisEvent.EventParam == getCheckSum(checkSumVal))
         {
           updateCO2Val(sensorVal); 
-          printf("CO2 val: %d\n", sensorVal); 
+          // printf("CO2 val: %d\n", sensorVal); 
           checkSumVal = 0; 
           retryAttempts = 0; 
           currStatusState = SEND_STATE; 
