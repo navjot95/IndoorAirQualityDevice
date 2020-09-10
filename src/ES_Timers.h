@@ -31,7 +31,7 @@ ES_TimerReturn_t ES_Timer_InitTimer(uint8_t Num, uint32_t NewTime);
 ES_TimerReturn_t ES_Timer_SetTimer(uint8_t Num, uint32_t NewTime);
 ES_TimerReturn_t ES_Timer_StartTimer(uint8_t Num);
 ES_TimerReturn_t ES_Timer_StopTimer(uint8_t Num);
-uint16_t ES_Timer_GetTime(void);
+uint32_t ES_Timer_GetTime(void);
 
 // These two are used by the framework
 void ES_Timer_Init(TimerRate_t Rate);

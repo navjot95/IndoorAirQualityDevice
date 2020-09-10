@@ -14,6 +14,7 @@
 #include "ES_Timers.h"
 #include "IAQ_util.h"
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <InfluxDbClient.h>
 #include <InfluxDbCloud.h>
 #include <time.h>
@@ -33,8 +34,8 @@
 #define TZ_INFO "PST8PDT"
 #define WRITE_PRECISION WritePrecision::S
 #define MAX_BATCH_SIZE 1
-#define WRITE_BUFFER_SIZE 10
-#define FLUSH_INTERVAL (60*4)  // max num seconds to retain data for cloud  
+#define WRITE_BUFFER_SIZE 50
+#define FLUSH_INTERVAL (60*10)  // max num seconds to retain data for cloud  
 
 typedef enum
 {
@@ -126,16 +127,19 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
         if(wifiRetries <= MAX_WIFI_RETRIES)
         {
           // Setup wifi
+          WiFi.setAutoConnect(false);
           WiFi.mode(WIFI_STA);
+          // WiFi.setSleep(true); 
           WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
-          Serial.print("Connecting to wifi");
+          esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+          printf("Connecting to wifi\n");
           ES_Timer_InitTimer(WIFI_TIMER_NUM, WIFI_POLLING_PERIOD); 
           currSMState = CONNECTING_STATE; 
         }
         else
         {
           wifiRetries = 0; 
-          Serial.println("Could not connect with Wifi");
+          printf("Could not connect with Wifi\n");
         }
       }
       break;
@@ -148,18 +152,20 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
         static uint8_t tmoutCounts = 0; 
         if(WiFi.status() == WL_CONNECTED)
         {
-          Serial.println("\nConnected");
+          printf("Connected\n");
           tmoutCounts = 0; 
           wifiRetries = 0; 
           currSMState = START_CONNECTION; 
 
           client.setWriteOptions(WRITE_PRECISION, MAX_BATCH_SIZE, WRITE_BUFFER_SIZE, FLUSH_INTERVAL, false); 
           timeSync(TZ_INFO, "pool.ntp.org"); // TODO: make unblocking and don't need to do this every time. Maybe once every hour
-          delay(100); 
+          delay(500); 
           setupDataPt(); 
           publishDataPt(); // TODO: make into state machine so retry if failed once
           ES_Event_t NewEvent = {.EventType=CLOUD_UPDATED_EVENT};
           PostMainService(NewEvent); 
+          WiFi.disconnect(true);
+          WiFi.mode(WIFI_OFF);  
 
         }else
         { 

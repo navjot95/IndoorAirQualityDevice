@@ -13,7 +13,6 @@
 #include "ES_framework.h"
 #include "ES_Timers.h"
 #include "Wire.h"
-#include <stdio.h>
 
 /*----------------------------- Module Defines ----------------------------*/
 // #define DEBUG_SVM30
@@ -28,7 +27,7 @@
 #define SGP30_HEAD 0x20
 #define SGP30_INIT_AQ 0x03
 #define SGP30_MEASURE_AQ 0X08
-#define SGP30_WARMUP_TIME 15000
+#define SGP30_WARMUP_TIME 16000
 #define SGP30_SAMPLE_TIME 1000
 // temp and RH sensor
 #define SHTC1_FLAG false 
@@ -57,12 +56,19 @@ void printAirQualityValues();
 uint8_t crcCheck(uint8_t* p, int len);
 void clearI2CBuffer();
 bool retryRead(uint8_t *retryAttempts, uint8_t *bytesRead, uint8_t *data_idx, bool *sensorFlag);
-float rawDataToRH(uint16_t temp_raw, uint16_t rh_raw);
-float rawDataToTemp(uint16_t temp_raw);
+uint16_t rawDataToRH(uint16_t temp_raw, uint16_t rh_raw);
+uint16_t rawDataToTemp(uint16_t temp_raw);
 
 /*---------------------------- Module Variables ---------------------------*/
 static uint8_t MyPriority;
 static SMStatusState_t currSMState = INIT_MEASUREMENTS_STATE; 
+static IAQmode_t SVM30_mode = STREAM_MODE; 
+static uint8_t numReads = 0;  // num of sensor readings completed for the avg
+static bool sensorConnected = false; 
+static runAvg_t eCO2RunAvg = {.runAvgSum=0, .buff={0}, .oldestIdx=0};
+static runAvg_t tVOCRunAvg = {.runAvgSum=0, .buff={0}, .oldestIdx=0};
+static runAvg_t tempRunAvg = {.runAvgSum=0, .buff={0}, .oldestIdx=0};
+static runAvg_t rhRunAvg = {.runAvgSum=0, .buff={0}, .oldestIdx=0};
 
 /*------------------------------ Module Code ------------------------------*/
 /****************************************************************************
@@ -83,6 +89,7 @@ static SMStatusState_t currSMState = INIT_MEASUREMENTS_STATE;
 bool InitSVM30Service(uint8_t Priority)
 {
   MyPriority = Priority;
+  Wire.begin();
 
   return true; 
 }
@@ -126,7 +133,6 @@ ES_Event_t RunSVM30Service(ES_Event_t ThisEvent)
   ES_Event_t ReturnEvent;
   ReturnEvent.EventType = ES_NO_EVENT; // assume no errors
   static uint8_t retryAttempts = 0; 
-  static uint8_t numReads = 0;  // num of sensor readings completed for the avg
   static bool SGP30_SHTC1_flag = SGP30_FLAG; 
   
   switch (currSMState)
@@ -140,7 +146,6 @@ ES_Event_t RunSVM30Service(ES_Event_t ThisEvent)
       else if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == SVM30_TIMER_NUM)
       {
         clearI2CBuffer();  // clear out buffer just to be safe
-        Wire.begin();
         Wire.beginTransmission(SGP30_ADDR); 
         Wire.write(SGP30_HEAD);
         Wire.write(SGP30_INIT_AQ); 
@@ -223,7 +228,6 @@ ES_Event_t RunSVM30Service(ES_Event_t ThisEvent)
     {
       static uint8_t bytesread = 1;  // bytes read in a single transmission
       static uint8_t data_idx = 0; 
-      static float eCO2_avg, tVOC_avg, tm_avg, rh_avg = 0; 
       static uint8_t sensorData[4] = {0};  
 
       if(ThisEvent.EventType == ES_I2C)
@@ -231,26 +235,6 @@ ES_Event_t RunSVM30Service(ES_Event_t ThisEvent)
         // #ifdef DEBUG_SVM30
         // printf("I2C bytes read (%d): %d\n", bytesread, ThisEvent.EventParam); 
         // #endif
-
-        if(numReads < NUM_SAMPLES_SKIP)  // skipping first few reads to let sensor algo settle 
-        {
-          #ifdef DEBUG_SVM30
-          printf("%d: Skipping\n", numReads); 
-          #endif
-
-          if(bytesread == SVM30_RESP_LEN)
-          {
-            bytesread = 1; 
-            data_idx = 0; 
-            numReads++; 
-            currSMState = WARMUP_STATE; 
-          }
-          else
-          {
-            bytesread++; 
-          }
-          return ReturnEvent; 
-        }
 
         if(bytesread % 3 == 0)  // is it a CRC byte?
         { 
@@ -286,35 +270,39 @@ ES_Event_t RunSVM30Service(ES_Event_t ThisEvent)
             printf("tvoc: %i\n", dataByte2_raw); 
             #endif
 
-            eCO2_avg += dataByte1_raw;  
-            tVOC_avg += dataByte2_raw;
+            updateRunAvg(&eCO2RunAvg, dataByte1_raw);  
+            updateRunAvg(&tVOCRunAvg, dataByte2_raw);
             SGP30_SHTC1_flag = SHTC1_FLAG;  // switch to the other sensor 
             ES_Event_t NewEvent = {.EventType=ES_READ_SENSOR}; 
             PostSVM30Service(NewEvent); 
           }
           else 
           {
+            sensorConnected = true; 
             //now finished reading 2nd sensor
             SGP30_SHTC1_flag = SGP30_FLAG; 
-            tm_avg += rawDataToTemp(dataByte1_raw);
-            rh_avg += rawDataToRH(dataByte1_raw, dataByte2_raw);
+            updateRunAvg(&tempRunAvg, rawDataToTemp(dataByte1_raw));
+            updateRunAvg(&rhRunAvg, rawDataToRH(dataByte1_raw, dataByte2_raw));
+            // tm_avg += rawDataToTemp(dataByte1_raw);
+            // rh_avg += rawDataToRH(dataByte1_raw, dataByte2_raw);
 
-            numReads++; 
-            if(numReads == SVM30_SAMPLE_READS)
+            if(SVM30_mode == STREAM_MODE)
+              numReads = 0; 
+            else
+              numReads++; 
+
+            if(numReads >= SVM30_SAMPLE_READS)
             {
-              eCO2_avg /= (SVM30_SAMPLE_READS - NUM_SAMPLES_SKIP);
-              tVOC_avg /= (SVM30_SAMPLE_READS - NUM_SAMPLES_SKIP);
-              tm_avg /= (SVM30_SAMPLE_READS - NUM_SAMPLES_SKIP);
-              rh_avg /= (SVM30_SAMPLE_READS - NUM_SAMPLES_SKIP);
-              updateSVM30Vals(round(eCO2_avg), round(tVOC_avg), round(tm_avg), round(rh_avg)); 
-              printf("Avgs:  eCO2:%.2f  tVOC:%.2f  tm:%.02f  rh:%.02f\n", eCO2_avg, tVOC_avg, tm_avg, rh_avg); 
+              int16_t avgeCO2 =  round((float)eCO2RunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
+              int16_t avgtVOC  = round((float)tVOCRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
+              int16_t avgtm =  round((float)tempRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
+              int16_t avgrh  = round((float)rhRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
+
+              updateSVM30Vals(avgeCO2, avgtVOC, avgtm, avgrh); 
+              printf("Avgs:  eCO2:%d  tVOC:%d  tm:%d  rh:%d\n", avgeCO2, avgtVOC, avgtm, avgrh); 
 
               retryAttempts = 0; 
               numReads = 0; 
-              eCO2_avg = 0; 
-              tVOC_avg = 0; 
-              tm_avg = 0; 
-              rh_avg = 0; 
               currSMState = INIT_MEASUREMENTS_STATE; 
               ES_Timer_StopTimer(SVM30_TIMER_NUM);
             }
@@ -337,6 +325,32 @@ ES_Event_t RunSVM30Service(ES_Event_t ThisEvent)
   }
   
   return ReturnEvent;
+}
+
+
+void setModeSVM30(IAQmode_t newMode)
+{
+  SVM30_mode = newMode; 
+}
+
+
+void getSVM30Avg(int16_t *eCO2Avg, int16_t *tVOCAvg, int16_t *tpAvg, int16_t *rhAvg)
+{
+  if(sensorConnected)
+  {
+    *eCO2Avg =  round((float)eCO2RunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
+    *tVOCAvg  = round((float)tVOCRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
+    *tpAvg =  round((float)tempRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
+    *rhAvg  = round((float)rhRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
+  }else
+  {
+    *eCO2Avg = -1; 
+    *tVOCAvg = -1; 
+    *tpAvg = -1; 
+    *rhAvg = -1; 
+  }
+
+  printf("eCO2 run avg: %d    tVOC run avg: %d     tp run avg: %d     rh run avg: %d\n", *eCO2Avg, *tVOCAvg, *tpAvg, *rhAvg); 
 }
 
 
@@ -366,6 +380,8 @@ bool retryRead(uint8_t *retryAttempts, uint8_t *bytesRead, uint8_t *data_idx, bo
   if(data_idx != NULL)
     *data_idx = 0; 
 
+  sensorConnected = false; 
+
   bool skipWarmup = false; 
   if(*sensorFlag == SHTC1_FLAG)
     skipWarmup = true;
@@ -375,10 +391,15 @@ bool retryRead(uint8_t *retryAttempts, uint8_t *bytesRead, uint8_t *data_idx, bo
   else
     currSMState = INIT_MEASUREMENTS_STATE; 
   
+  if(SVM30_mode == STREAM_MODE)
+  {
+    *retryAttempts = 0;  // in stream mode don't need to stop trying
+  }
 
   if(*retryAttempts >= MAX_RETRY_ATTEMPTS)
   {
     currSMState = INIT_MEASUREMENTS_STATE; 
+    numReads = 0; 
     *retryAttempts = 0; 
     ES_Timer_StopTimer(SVM30_TIMER_NUM);
     ES_Timer_StopTimer(SVM30_TIMER2_NUM); 
@@ -394,23 +415,23 @@ bool retryRead(uint8_t *retryAttempts, uint8_t *bytesRead, uint8_t *data_idx, bo
   return true; 
 }
 
-float rawDataToTemp(uint16_t temp_raw)
+uint16_t rawDataToTemp(uint16_t temp_raw)
 {
   float temp = -45.68 + 175.7 * ((float)temp_raw/((float)UINT16_MAX+1.0));
   temp = (temp * (9.0/5.0)) + 32; 
   #ifdef DEBUG_SVM30
   printf("Temp: %.2fF  ", temp); 
   #endif
-  return temp; 
+  return (uint16_t)round(temp); 
 }
 
-float rawDataToRH(uint16_t temp_raw, uint16_t rh_raw)
+uint16_t rawDataToRH(uint16_t temp_raw, uint16_t rh_raw)
 {
   float rh = (103.7 - 3.2*((float)temp_raw/((float)UINT16_MAX+1.0))) * ((float)rh_raw/((float)UINT16_MAX+1.0));
   #ifdef DEBUG_SVM30
   printf("RH: %.2f\n", rh);
   #endif
-  return rh; 
+  return (uint16_t)round(rh); 
 }
 
 uint8_t crcCheck(uint8_t* p, int len) {

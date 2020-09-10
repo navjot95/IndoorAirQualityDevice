@@ -252,7 +252,7 @@ ES_TimerReturn_t ES_Timer_InitTimer(uint8_t Num, uint32_t NewTime)
  Author
      J. Edward Carryer, 06/01/04 08:04
 ****************************************************************************/
-uint16_t ES_Timer_GetTime(void)
+uint32_t ES_Timer_GetTime(void)
 {
   return _HW_GetTickCount();
 }

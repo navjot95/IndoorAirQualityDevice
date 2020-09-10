@@ -12,6 +12,16 @@
 #define BAT_OFFSET 350
 
 
+void updateRunAvg(runAvg_t *runAvgValues, uint16_t newSensorVal)
+{
+  runAvgValues->runAvgSum += newSensorVal;
+  runAvgValues->runAvgSum -= runAvgValues->buff[runAvgValues->oldestIdx]; 
+  runAvgValues->buff[runAvgValues->oldestIdx] = newSensorVal; 
+  (runAvgValues->oldestIdx)++; 
+  (runAvgValues->oldestIdx) %= RUN_AVG_BUFFER_LEN; 
+}
+
+
 uint8_t getCurrTime(char *str, uint8_t len)
 {
   time_t now;

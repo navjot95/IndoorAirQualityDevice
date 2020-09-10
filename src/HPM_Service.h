@@ -17,7 +17,7 @@ bool InitHPMService(uint8_t Priority);
 bool PostHPMService(ES_Event_t ThisEvent);
 ES_Event_t RunHPMService(ES_Event_t ThisEvent);
 
-void HPMsetMode(IAQmode_t newMode);
+void setModeHPM(IAQmode_t newMode);
 void getPMAvg(int16_t *pm10Avg, int16_t *pm25Avg);
 void stopHPMMeasurements(); 
 

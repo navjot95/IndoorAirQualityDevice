@@ -24,16 +24,16 @@
  */
 typedef enum
 {
-  ES_Timer_RATE_500uS = 20000UL -1UL,
-  ES_Timer_RATE_1mS   = 40000UL -1UL,
-  ES_Timer_RATE_2mS   = 80000UL -1UL
+  ES_Timer_RATE_500uS = 20000UL, // -1UL,
+  ES_Timer_RATE_1mS   = 40000UL, // -1UL,
+  ES_Timer_RATE_2mS   = 80000UL, // -1UL
 }TimerRate_t;
 
 
 // prototypes for the hardware specific routines
 void _HW_Timer_Init(TimerRate_t Rate);
 bool _HW_Process_Pending_Ints(void);
-uint16_t _HW_GetTickCount(void);
+uint32_t _HW_GetTickCount(void);
 void ConsoleInit(void);
 
 

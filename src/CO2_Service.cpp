@@ -40,6 +40,10 @@ void clearSerial2Buffer();
 /*---------------------------- Module Variables ---------------------------*/
 static uint8_t MyPriority;
 static statusState_t currStatusState = SEND_STATE;
+static IAQmode_t CO2_mode = STREAM_MODE; 
+static uint8_t numReads = 0; 
+static bool sensorConnected = false; 
+static runAvg_t CO2RunAvg = {.runAvgSum=0, .buff={0}, .oldestIdx=0};
 
 /*------------------------------ Module Code ------------------------------*/
 /****************************************************************************
@@ -218,13 +222,28 @@ ES_Event_t RunCO2Service(ES_Event_t ThisEvent)
       {
         if(ThisEvent.EventParam == getCheckSum(checkSumVal))
         {
-          updateCO2Val(sensorVal); 
-          // printf("CO2 val: %d\n", sensorVal); 
+          sensorConnected = true; 
+          updateRunAvg(&CO2RunAvg, sensorVal); 
+          if(CO2_mode == STREAM_MODE)
+            numReads = 0; 
+          else
+            numReads++;
+
+          if(numReads >= RUN_AVG_BUFFER_LEN * 2)
+          {
+            retryAttempts = 0; 
+            numReads = 0; 
+            updateCO2Val(sensorVal); 
+            ES_Timer_StopTimer(CO2_TIMER_NUM);
+          }
+          else
+          {
+            ES_Timer_InitTimer(CO2_TIMER_NUM, 1000); 
+          }
+          
           checkSumVal = 0; 
-          retryAttempts = 0; 
           currStatusState = SEND_STATE; 
-          // ES_Timer_StopTimer(CO2_TIMER_NUM);
-          ES_Timer_InitTimer(CO2_TIMER_NUM, 1000); 
+          
         }
         else
         {
@@ -255,6 +274,26 @@ bool EventCheckerCO2(){
 }
 
 
+void setModeCO2(IAQmode_t newMode)
+{
+  CO2_mode = newMode; 
+}
+
+
+void getCO2Avg(int16_t *CO2Avg)
+{
+  if(sensorConnected)
+  {
+    *CO2Avg =  round((float)CO2RunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
+  }else
+  {
+    *CO2Avg = -1; 
+  }
+
+  printf("CO2 run avg: %d \n", *CO2Avg); 
+}
+
+
 
 /***************************************************************************
  private functions
@@ -265,10 +304,17 @@ bool retryRead(uint8_t *retryAttempts, uint8_t *checkSumVal)
   if(retryAttempts == NULL || checkSumVal == NULL)
     return false; 
 
+  sensorConnected = false; 
+  if(CO2_mode == STREAM_MODE)
+  {
+    *retryAttempts = 0;  // in stream mode don't need to stop trying
+  }
+
   *checkSumVal = 0; 
   currStatusState = SEND_STATE; 
   if(*retryAttempts >= MAX_RETRY_READS)
   {
+    numReads = 0; 
     *retryAttempts = 0; 
     ES_Timer_StopTimer(CO2_TIMER_NUM);
     updateCO2Val(-1); 

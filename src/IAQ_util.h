@@ -12,6 +12,7 @@
 #include <time.h>
 
 #define PWR_RESET 1
+#define RUN_AVG_BUFFER_LEN 8  // size of running average buffer MAX VALUE: 255
 
 #ifdef DEBUG
 #define DEBUG_TEST 1
@@ -29,6 +30,15 @@ typedef enum
   NO_MODE  // Used to remove label for screen 
 } IAQmode_t; 
 
+typedef struct
+{
+    uint32_t runAvgSum;
+    uint16_t buff[RUN_AVG_BUFFER_LEN]; 
+    uint8_t oldestIdx;  
+}runAvg_t; 
+
+
+void updateRunAvg(runAvg_t *runAvgValues, uint16_t newSensorVal);
 
 // prints current time into char *str in format: mm/dd hh:mm AM/PM
 // returns 1 on sucess and -1 if buffer is not big enough

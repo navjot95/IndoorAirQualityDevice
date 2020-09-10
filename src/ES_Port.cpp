@@ -21,9 +21,9 @@
 #include "ES_Port.h"
 #include "ES_Timers.h"
 
-
+// #define SYS_TICK_DEBUG
 #ifdef SYS_TICK_DEBUG
-    #define DEBUG_PIN 13
+    #define DEBUG_PIN 21
     bool pinState = false; 
 #endif
 
@@ -37,9 +37,8 @@
 static volatile uint8_t TickCount;
 
 // Global tick count to monitor number of SysTick Interrupts
-// make uint16_t to maintain backwards compatibility and not overly burden
-// 8 and 16 bit processors
-static volatile uint16_t SysTickCounter = 0;
+// make uint16_t on 8 and 16 bit processors so to not overly burden them
+static volatile uint32_t SysTickCounter = 0;
 
 // need mux in order to synchronize between main loop and timer ISR
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
@@ -124,7 +123,7 @@ void _HW_Timer_Init(TimerRate_t Rate)
  Author
     Ed Carryer, 10/27/14 13:55
 ****************************************************************************/
-uint16_t _HW_GetTickCount(void)
+uint32_t _HW_GetTickCount(void)
 {
   return SysTickCounter;
 }
@@ -156,7 +155,7 @@ bool _HW_Process_Pending_Ints(void)
   while (TickCount > 0)
   {
     /* call the framework tick response to actually run the timers */
-    ES_Timer_Tick_Resp();
+    ES_Timer_Tick_Resp();  // With 40MHz clock rate, and alarm value of 40,000-1, this is called every 1ms
 
     portENTER_CRITICAL_ISR(&timerMux);
     TickCount--;

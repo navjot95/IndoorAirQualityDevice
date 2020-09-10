@@ -62,23 +62,15 @@ typedef enum{
 #define STOP_AUTO_SEND_CMD 0x20
 
 // General config 
-#define RUN_AVG_BUFFER_LEN 8  // size of running average buffer MAX VALUE: 255
 #define SUB_COMM_RETRIES 2
 #define MAX_RETRY_READS 2
 
 //Timer lenghts
-#define SAMPLE_PERIOD 2000  // Amount of time each sample takes
+#define SAMPLE_PERIOD 1000  // Amount of time each sample takes
 #define STOP_AUTO_WAIT_TIME 100
 #define WARMUP_WAIT_TIME 20000
 #define PM_MAX_VALUE 1000
 
-
-typedef struct
-{
-    uint32_t runAvgSum;
-    uint16_t buff[RUN_AVG_BUFFER_LEN]; 
-    uint8_t oldestIdx;  
-}runAvg_t; 
 
 /*---------------------------- Module Functions ---------------------------*/
 bool retryRead(uint8_t *retryAttempts, uint16_t *checkSumVal, bool skipWarmup);
@@ -456,7 +448,7 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
         else
           numGoodReads++; 
 
-        if(numGoodReads < RUN_AVG_BUFFER_LEN)  // TODO: maybe make RUN_AVG_BUFFER_LEN to 16 so first 8 reads are discarded 
+        if(numGoodReads < RUN_AVG_BUFFER_LEN*2)  // twice as long as buffer so first 8 values are discarded
         {
           #ifdef DEBUG_SENSOR
           printf("Again: \n");
@@ -521,12 +513,12 @@ void getPMAvg(int16_t *pm10Avg, int16_t *pm25Avg)
     *pm25Avg = -1; 
   }
 
-  printf("pm10 run avg: %d\n", *pm10Avg); 
+  printf("pm10 run avg: %d  ", *pm10Avg); 
   printf("pm25 run avg: %d\n", *pm25Avg);
 }
 
 
-void HPMsetMode(IAQmode_t newMode)
+void setModeHPM(IAQmode_t newMode)
 {
   HPM_mode = newMode; 
 }
@@ -571,19 +563,6 @@ bool retryRead(uint8_t *retryAttempts, uint16_t *checkSumVal, bool skipWarmup)
   ES_Event_t newEvent = {.EventType=ES_READ_SENSOR};
   PostHPMService(newEvent);
   return true; 
-}
-
-void updateRunAvg(runAvg_t *runAvgValues, uint16_t newSensorVal)
-{
-  runAvgValues->runAvgSum += newSensorVal;
-  runAvgValues->runAvgSum -= runAvgValues->buff[runAvgValues->oldestIdx]; 
-  runAvgValues->buff[runAvgValues->oldestIdx] = newSensorVal; 
-  (runAvgValues->oldestIdx)++; 
-  (runAvgValues->oldestIdx) %= RUN_AVG_BUFFER_LEN; 
-
-  int32_t temp = round((float)runAvgValues->runAvgSum / RUN_AVG_BUFFER_LEN); 
-  printf("New val: %d  ", newSensorVal);
-  printf("Running avg: %d\n", temp); 
 }
 
 

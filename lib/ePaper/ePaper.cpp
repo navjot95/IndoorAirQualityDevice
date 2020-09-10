@@ -28,7 +28,7 @@
 #include "ePaper.h"
 
 
-#define PARTIAL_REFRESH_LIMIT 4  // full refresh every this many refreshes, otherwise partial refresh
+#define PARTIAL_REFRESH_LIMIT 8  // full refresh every this many refreshes, otherwise partial refresh
 RTC_DATA_ATTR static uint8_t refreshCounter = 1; 
 
 static const uint8_t lut_full_update[] = {

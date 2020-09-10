@@ -15,6 +15,9 @@
 #include "CloudService.h"
 #include "WiFi.h"
 #include "IAQ_util.h"
+#include "driver/adc.h"
+#include <esp_wifi.h>
+#include <esp_bt.h>
 
 /*----------------------------- Module Defines ----------------------------*/
 #define LOOP_TIMER_LEN 60000  // sampeling period of the sensors
@@ -22,9 +25,9 @@
 #define BAT_LOW_THRES 3500  // voltage at which to go into hibernation mode
 #define AUTO_MODE_TIMER_LEN 300000UL  // Time in ms
 #define STREAM_MODE_TIMER_LEN 6000U  // Time in ms
-#define WARMUP_TIMER_LEN 186000UL  // Time in ms
+#define WARMUP_TIMER_LEN 30000UL  //186000UL  // Time in ms
 #define WIFI_TIMEOUT_LEN  36000UL  // ms
-#define CLOUD_COUNTER_LEN 10  // Cloud updates every X screen refreshes   
+#define CLOUD_COUNTER_LEN 10  // Cloud updates every this many screen refreshes   
 
 typedef enum
 {
@@ -36,7 +39,6 @@ typedef enum
 typedef enum
 {
   START_STATE,
-  WARMUP_STATE,
   AUTO_STATE,
   STREAM_STATE,
   STREAM_CLOUD_STATE
@@ -49,6 +51,8 @@ void sensorsPwrEnable(bool turnOn);
 void setFlagBit(sensorIdx_t sensorBitIdx);
 void shutdownIAQ(bool timedShtdwn);
 void checkBattery();
+void changeSensorsIAQMode(IAQmode_t currIAQMode);
+void startSensorsSM();
 
 /*---------------------------- Module Variables ---------------------------*/
 static uint8_t MyPriority;
@@ -80,6 +84,16 @@ bool InitMainService(uint8_t Priority)
   checkBattery();
   initPins(); 
   initePaper();
+  adc_power_on();
+  btStop();  // Make sure bluetooth is off
+
+  char str[20]; 
+  if(isTimeSynced())
+    getCurrTime(str, 20); 
+  else 
+    strcpy(str, "Time not synced");
+
+  printf("%s\n", str); 
 
   // post the initial transition event
   ThisEvent.EventType = ES_INIT;
@@ -133,7 +147,6 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
   ES_Event_t ReturnEvent;
   ReturnEvent.EventType = ES_NO_EVENT; // assume no errors
   static uint8_t cloudUpdateCounter = 1; 
-  IAQmode_t currIAQMode; 
 
   checkBattery();   // TODO: write into event checker 
   if(ThisEvent.EventType == ES_SW_BUTTON_PRESS && ThisEvent.EventParam == LONG_BT_PRESS)
@@ -152,72 +165,35 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
       {
         sensorsPwrEnable(true); 
         const char* hdlnLabel; 
+        uint32_t timerLen; 
+        IAQmode_t currIAQMode = STREAM_MODE; 
 
         esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
         if(wakeup_reason == ESP_SLEEP_WAKEUP_TIMER)
         {
+          currSMState = AUTO_STATE; 
+          timerLen = AUTO_MODE_TIMER_LEN;  // backup timer 
           currIAQMode = AUTO_MODE; 
-          hdlnLabel = "Reading...";  // TODO: Maybe just remove "Reading..." 
+          hdlnLabel = "Reading...";  
         } 
         else
         {
-          currIAQMode = STREAM_MODE; 
-          hdlnLabel = "Warming up..."; 
-        }
-
-        currSMState = WARMUP_STATE; 
-        ePaperChangeMode(currIAQMode);
-        ePaperChangeHdln(hdlnLabel, true); 
-        HPMsetMode(currIAQMode); 
-        ES_Event_t NewEvent = {.EventType=ES_READ_SENSOR};
-        PostHPMService(NewEvent); 
-        // PostCO2Service(NewEvent); 
-        // PostSVM30Service(NewEvent);  // Worst case senario, could hang for 60 secs 
-
-        ES_TimerReturn_t returnVal = ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, WARMUP_TIMER_LEN);  // CO2 sensor has 3 min warmup time
-        if(returnVal == ES_Timer_ERR)
-          Serial.println("Main timer err\n");
-      }
-    }
-
-    case WARMUP_STATE:
-    {
-      if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == MAIN_SERV_TIMER_NUM)
-      {
-        uint32_t timerLen; 
-        if(currIAQMode == AUTO_MODE)
-        {
-          currSMState = AUTO_STATE; 
-          timerLen = AUTO_MODE_TIMER_LEN;  // backup timer 
-        } else
-        {
           currSMState = STREAM_STATE; 
-          timerLen = STREAM_MODE_TIMER_LEN;  
-        }
-        ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, timerLen); 
-
-      }else if(ThisEvent.EventType == ES_SW_BUTTON_PRESS && ThisEvent.EventParam == SHORT_BT_PRESS)
-      {
-        const char* hdlnLabel; 
-        if(currIAQMode == AUTO_MODE)
-        {
+          timerLen = WARMUP_TIMER_LEN;  // polling timer
           currIAQMode = STREAM_MODE; 
           hdlnLabel = "Warming up..."; 
-        } else
-        {
-          currIAQMode = AUTO_MODE; 
-          hdlnLabel = "Reading..."; 
         }
+
         ePaperChangeMode(currIAQMode);
         ePaperChangeHdln(hdlnLabel, true); 
-        HPMsetMode(currIAQMode); 
 
-      }else if(ThisEvent.EventType == SENSORS_READ_EVENT)
-      {
-        printf("Sensors posted too early\n");
+        changeSensorsIAQMode(currIAQMode); 
+        startSensorsSM(); 
+        ES_TimerReturn_t returnVal = ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, timerLen);  // CO2 sensor has 3 min warmup time
+        printf("Going into %s\n", (currIAQMode == STREAM_MODE)? "STREAM MODE" : "AUTO MODE"); 
+        if(returnVal == ES_Timer_ERR)
+          printf("Main timer err\n");
       }
-
-      break;
     }
 
     case AUTO_STATE:
@@ -240,14 +216,23 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
       else if(ThisEvent.EventType == ES_SW_BUTTON_PRESS && ThisEvent.EventParam == SHORT_BT_PRESS)
       {
         printf("Changing to stream from auto\n");
-        currSMState = STREAM_STATE; 
-        ePaperChangeMode(STREAM_MODE);
-        HPMsetMode(STREAM_MODE); 
-        ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, STREAM_MODE_TIMER_LEN);
 
-        // in case state machine is done and waiting to restart
-        ES_Event_t NewEvent = {.EventType=ES_READ_SENSOR};  // TODO: Make sure this doesn't mess up any of the SMs 
-        PostHPMService(NewEvent);  
+        currSMState = STREAM_STATE; 
+        changeSensorsIAQMode(STREAM_MODE); 
+
+        if(sensorReads_flag != 0)
+        {
+          printf("Wait time extended\n");
+          ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, WARMUP_TIMER_LEN);
+          startSensorsSM();  // one of the sensors finished, so just restart warmup for simplicity 
+        }
+        else
+        {
+          ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, STREAM_MODE_TIMER_LEN);
+        }
+
+        ePaperChangeMode(STREAM_MODE);
+        ePaperChangeHdln("Warming up...", true); 
       }
       break;
     }
@@ -258,7 +243,8 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
       {
         ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, STREAM_MODE_TIMER_LEN);  // screen update timer for stream
         getPMAvg(&(sensorReads.PM10), &(sensorReads.PM25));
-        //TODO: Update other sensor values 
+        getSVM30Avg(&(sensorReads.eCO2), &(sensorReads.tVOC), &(sensorReads.temp), &(sensorReads.rh)); 
+        getCO2Avg(&(sensorReads.CO2));
         //TODO: resync time after some time
         //TODO: Don't want to keep retrying wifi if not connected
 
@@ -289,10 +275,10 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
       {
         printf("Changing to Auto from stream\n");
         currSMState = AUTO_STATE; 
+        changeSensorsIAQMode(AUTO_MODE); 
         ePaperChangeMode(AUTO_MODE);
-        HPMsetMode(AUTO_MODE); 
-        ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, AUTO_MODE_TIMER_LEN); 
         ePaperChangeHdln("Reading...", true); 
+        ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, AUTO_MODE_TIMER_LEN); 
       }
       
       break;  
@@ -300,7 +286,7 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
 
     case STREAM_CLOUD_STATE:
     {
-      if(ThisEvent.EventType == CLOUD_UPDATED_EVENT || (ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == MAIN_SERV_TIMER_NUM))
+      if(ThisEvent.EventType == CLOUD_UPDATED_EVENT )
       {
         updateScreenSensorVals(&sensorReads, false);
         currSMState = STREAM_STATE; 
@@ -309,7 +295,10 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
       else if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == MAIN_SERV_TIMER_NUM)
       {
         printf("no wifi\n");
-        ePaperChangeHdln("No Wifi", true); 
+        ePaperChangeHdln("No Wifi", false); 
+        updateScreenSensorVals(&sensorReads, false);
+        currSMState = STREAM_STATE; 
+        ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, STREAM_MODE_TIMER_LEN);
       }
     }
   }
@@ -353,15 +342,22 @@ void updateSVM30Vals(int16_t eCO2_newVal, int16_t tVOC_newVal, int16_t tm_newVal
 void shutdownIAQ(bool timedShtdwn)
 {
   printf("Going into deep sleep\n");
+  char str[20]; 
+  getCurrTime(str, 20); 
+  printf(str); 
+
+  stopHPMMeasurements();  // turns off HPM fan
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
-  stopHPMMeasurements();  // turns off HPM fan
+  adc_power_off();
+
   sensorsPwrEnable(false);
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_26,1); //1 = High, 0 = Low 
   if(timedShtdwn)
     esp_deep_sleep(300000000UL); 
   else 
     esp_deep_sleep_start(); 
+
 }
 
 
@@ -379,6 +375,22 @@ void setFlagBit(sensorIdx_t sensorBitIdx)
     ES_Event_t newEvent = {.EventType=SENSORS_READ_EVENT};
     RunMainService(newEvent); 
   }
+}
+
+void changeSensorsIAQMode(IAQmode_t currIAQMode)
+{
+  sensorReads_flag = 0; 
+  setModeHPM(currIAQMode); 
+  setModeSVM30(currIAQMode); 
+  setModeCO2(currIAQMode); 
+}
+
+void startSensorsSM()
+{
+  ES_Event_t NewEvent = {.EventType=ES_READ_SENSOR};
+  PostHPMService(NewEvent); 
+  PostSVM30Service(NewEvent);  // Worst case senario, could hang for 60 secs 
+  PostCO2Service(NewEvent); 
 }
 
 void initPins()
@@ -407,6 +419,7 @@ void checkBattery()
     ePaperChangeMode(NO_MODE); 
     ePaperChangeHdln("Device OFF", false);
     ePaperPrintfAlert("Low Battery", "Please plug in and press", "button when charged.");
+    delay(1000); 
     shutdownIAQ(false);
   }
 }

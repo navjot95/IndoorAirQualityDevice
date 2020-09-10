@@ -116,7 +116,7 @@ ES_Event_t RunButtonService(ES_Event_t ThisEvent)
         ES_Event_t newEvent; 
         newEvent.EventType = ES_SW_BUTTON_PRESS; 
         newEvent.EventParam = SHORT_BT_PRESS;
-        // printf("%lu\n", elapsed_time); 
+        printf("Short bt press: %lu\n", elapsed_time); 
         PostMainService(newEvent); 
 
         currStatusState = START_SM_STATE; 

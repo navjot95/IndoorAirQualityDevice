@@ -36,7 +36,7 @@
 #define BAR_WIDTH 10
 
 #define HDLN_X_OFFSET (SCREEN_WIDTH - calibri_12ptFont.charHeight) 
-#define HDLN2_Y_START 150
+#define HDLN2_Y_START 130
 
 
 typedef struct _sensor
@@ -173,6 +173,7 @@ void ePaperPrintfAlert(const char * title, const char * line1, const char * line
   epd.printf(line1, &calibri_12ptFont, 50, 65);
   epd.printf(line2, &calibri_12ptFont, 34, 65);
   updateBatLevel(getBatPerct()); 
+  updateEpaperTime(); 
   epd.updateScreen(true); 
 }
 
