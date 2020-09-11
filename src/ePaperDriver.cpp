@@ -60,6 +60,7 @@ void updateBatLevel(uint8_t batLevel);
 void updateSensorVal(sensor_t *thisSensor, int16_t newVal, int16_t newAltVal);
 uint8_t textVal(sensor_t *thisSensor, int16_t valToCalc);
 void updateTempRH(int16_t temp, int16_t rh);
+bool updateEpaperTime();  
 
 
 /*---------------------------- Module Variables ---------------------------*/
@@ -137,15 +138,12 @@ bool initePaper()
       return false;
   }
 
-  // if(rtc_get_reset_reason(0) == PWR_RESET)
-  // {
   epd.clearBuffer(); 
   displaySensor(&eCO2); 
   displaySensor(&tVOC); 
   displaySensor(&pm25); 
   displaySensor(&CO2);
   setupHeader();
-  // }
 
   return true; 
 }

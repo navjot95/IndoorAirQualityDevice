@@ -91,6 +91,11 @@ bool InitSVM30Service(uint8_t Priority)
   MyPriority = Priority;
   Wire.begin();
 
+  memset(eCO2RunAvg.buff, 0, sizeof(eCO2RunAvg.buff));
+  memset(tVOCRunAvg.buff, 0, sizeof(tVOCRunAvg.buff));
+  memset(tempRunAvg.buff, 0, sizeof(tempRunAvg.buff));
+  memset(rhRunAvg.buff, 0, sizeof(rhRunAvg.buff));
+
   return true; 
 }
 

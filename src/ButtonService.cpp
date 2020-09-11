@@ -94,7 +94,7 @@ ES_Event_t RunButtonService(ES_Event_t ThisEvent)
 {
   ES_Event_t ReturnEvent;
   ReturnEvent.EventType = ES_NO_EVENT; // assume no errors
-  static unsigned long timeStamp = millis(); 
+  static unsigned long timeStamp = 0; 
 
   switch (currStatusState)
   {
@@ -116,7 +116,7 @@ ES_Event_t RunButtonService(ES_Event_t ThisEvent)
         ES_Event_t newEvent; 
         newEvent.EventType = ES_SW_BUTTON_PRESS; 
         newEvent.EventParam = SHORT_BT_PRESS;
-        printf("Short bt press: %lu\n", elapsed_time); 
+        // printf("Short bt press: %lu\n", elapsed_time); 
         PostMainService(newEvent); 
 
         currStatusState = START_SM_STATE; 
@@ -157,9 +157,13 @@ bool EventCheckerButton(){
     newEvent.EventType = ES_HW_BUTTON_EVENT; 
 
     if(currVal > lastVal) 
+    {
       newEvent.EventParam = BT_PRESS;  // button pressed 
+    }
     else if(currVal < lastVal)
+    {
       newEvent.EventParam = BT_RELEASE;  // button released 
+    }
 
     lastVal = currVal;
     PostButtonService(newEvent); 

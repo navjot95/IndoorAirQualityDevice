@@ -20,12 +20,11 @@
 #include <esp_bt.h>
 
 /*----------------------------- Module Defines ----------------------------*/
-#define LOOP_TIMER_LEN 60000  // sampeling period of the sensors
-#define ALL_SENSORS_READ 0X02 // 0x07
+#define ALL_SENSORS_READ 0x07
 #define BAT_LOW_THRES 3500  // voltage at which to go into hibernation mode
 #define AUTO_MODE_TIMER_LEN 300000UL  // Time in ms
 #define STREAM_MODE_TIMER_LEN 6000U  // Time in ms
-#define WARMUP_TIMER_LEN 30000UL  //186000UL  // Time in ms
+#define WARMUP_TIMER_LEN 40000UL  //186000UL  // Time in ms
 #define WIFI_TIMEOUT_LEN  36000UL  // ms
 #define CLOUD_COUNTER_LEN 10  // Cloud updates every this many screen refreshes   
 
@@ -50,7 +49,7 @@ void initPins();
 void sensorsPwrEnable(bool turnOn);
 void setFlagBit(sensorIdx_t sensorBitIdx);
 void shutdownIAQ(bool timedShtdwn);
-void checkBattery();
+void shutdownBat();
 void changeSensorsIAQMode(IAQmode_t currIAQMode);
 void startSensorsSM();
 
@@ -81,11 +80,17 @@ bool InitMainService(uint8_t Priority)
   ES_Event_t ThisEvent;
   MyPriority = Priority;
   
-  checkBattery();
+  if(EventCheckerBat())
+  {
+    shutdownBat(); 
+  }
   initPins(); 
   initePaper();
   adc_power_on();
   btStop();  // Make sure bluetooth is off
+
+  setenv("TZ", "PST8PDT", 1); // set the correct timezone for time.h  
+  tzset();
 
   char str[20]; 
   if(isTimeSynced())
@@ -93,7 +98,7 @@ bool InitMainService(uint8_t Priority)
   else 
     strcpy(str, "Time not synced");
 
-  printf("%s\n", str); 
+  printf("Start time: %s\n", str); 
 
   // post the initial transition event
   ThisEvent.EventType = ES_INIT;
@@ -148,7 +153,10 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
   ReturnEvent.EventType = ES_NO_EVENT; // assume no errors
   static uint8_t cloudUpdateCounter = 1; 
 
-  checkBattery();   // TODO: write into event checker 
+  if(ThisEvent.EventType == LOW_BAT_EVENT)
+  {
+    shutdownBat();     
+  }
   if(ThisEvent.EventType == ES_SW_BUTTON_PRESS && ThisEvent.EventParam == LONG_BT_PRESS)
   {
     ePaperChangeMode(NO_MODE); 
@@ -174,18 +182,21 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
           currSMState = AUTO_STATE; 
           timerLen = AUTO_MODE_TIMER_LEN;  // backup timer 
           currIAQMode = AUTO_MODE; 
-          hdlnLabel = "Reading...";  
+          
         } 
         else
         {
           currSMState = STREAM_STATE; 
           timerLen = WARMUP_TIMER_LEN;  // polling timer
           currIAQMode = STREAM_MODE; 
+          // if(rtc_get_reset_reason() == POWERON_RESET)
+          //   hdlnLabel = "Reading...";  
+          // else 
           hdlnLabel = "Warming up..."; 
+          ePaperChangeHdln(hdlnLabel, true); 
         }
 
         ePaperChangeMode(currIAQMode);
-        ePaperChangeHdln(hdlnLabel, true); 
 
         changeSensorsIAQMode(currIAQMode); 
         startSensorsSM(); 
@@ -209,7 +220,7 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
         shutdownIAQ(true); 
       } else if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == MAIN_SERV_TIMER_NUM)
       {
-        // all sensors and cloud service didn't respond in time
+        // 1+ sensor or cloud service didn't respond in time
         printf("Main backup timer timedout\n");
         shutdownIAQ(true); 
       }
@@ -245,7 +256,6 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
         getPMAvg(&(sensorReads.PM10), &(sensorReads.PM25));
         getSVM30Avg(&(sensorReads.eCO2), &(sensorReads.tVOC), &(sensorReads.temp), &(sensorReads.rh)); 
         getCO2Avg(&(sensorReads.CO2));
-        //TODO: resync time after some time
         //TODO: Don't want to keep retrying wifi if not connected
 
         if(isTimeSynced())
@@ -333,6 +343,21 @@ void updateSVM30Vals(int16_t eCO2_newVal, int16_t tVOC_newVal, int16_t tm_newVal
 } 
 
 
+bool EventCheckerBat()
+{
+  // return false;  //! BATTERY CHECK IS DISABLED 
+  uint16_t batV = getBatVolt(); 
+  if(batV < BAT_LOW_THRES)
+  {
+    ES_Event_t NewEvent = {.EventType=LOW_BAT_EVENT}; 
+    PostMainService(NewEvent); 
+    return true; 
+  }
+  return false; 
+}
+
+
+
 
 /***************************************************************************
  private functions
@@ -354,7 +379,7 @@ void shutdownIAQ(bool timedShtdwn)
   sensorsPwrEnable(false);
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_26,1); //1 = High, 0 = Low 
   if(timedShtdwn)
-    esp_deep_sleep(300000000UL); 
+    esp_deep_sleep(900000000UL); // 15 mins
   else 
     esp_deep_sleep_start(); 
 
@@ -409,19 +434,15 @@ void sensorsPwrEnable(bool turnOn)
     digitalWrite(PWR_EN_PIN, LOW);  
 }
 
-// shutsdown device if battery voltage too low
-void checkBattery()
+// shuts down device because battery voltage too low
+void shutdownBat()
 {
-  uint16_t batV = getBatVolt(); 
-  if(batV < BAT_LOW_THRES)
-  {
-    printf("Low bat at %dV. Going to sleep.\n", batV);
-    ePaperChangeMode(NO_MODE); 
-    ePaperChangeHdln("Device OFF", false);
-    ePaperPrintfAlert("Low Battery", "Please plug in and press", "button when charged.");
-    delay(1000); 
-    shutdownIAQ(false);
-  }
+  printf("Low bat. Going to sleep.\n");
+  ePaperChangeMode(NO_MODE); 
+  ePaperChangeHdln("Device OFF", false);
+  ePaperPrintfAlert("Low Battery", "Please plug in and press", "button when charged.");
+  delay(1000); 
+  shutdownIAQ(false);
 }
 
 /*------------------------------- Footnotes -------------------------------*/

@@ -45,7 +45,8 @@ typedef enum
   SENSORS_READ_EVENT,
   WIFI_CONNECT,
   CLOUD_PUBLISH, 
-  CLOUD_UPDATED_EVENT
+  CLOUD_UPDATED_EVENT,
+  LOW_BAT_EVENT
 }ES_EventType_t;
 
 
@@ -54,7 +55,7 @@ typedef enum
 // the functions at the beginning of the list are checked first 
 
 //EventCheckerKeyBoard, EventCheckerButton
-#define EVENT_CHECKER_LIST EventCheckerCO2, EventCheckerHPM, EventChecker_SVM30, EventCheckerButton
+#define EVENT_CHECKER_LIST EventCheckerBat, EventCheckerButton, EventCheckerCO2, EventCheckerHPM, EventChecker_SVM30,
 
 
 
@@ -80,7 +81,7 @@ typedef enum
 #define TIMER12_RESP_FUNC TIMER_UNUSED
 #define TIMER13_RESP_FUNC TIMER_UNUSED
 #define TIMER14_RESP_FUNC TIMER_UNUSED
-#define TIMER15_RESP_FUNC PostTimerTestService
+#define TIMER15_RESP_FUNC TIMER_UNUSED
 
 #define CO2_TIMER_NUM 0
 #define HPM_TIMER_NUM 1
@@ -100,7 +101,7 @@ typedef enum
 /****************************************************************************/
 // This macro determines that number of services that are *actually* used in
 // a particular application. It will vary in value from 1 to MAX_NUM_SERVICES
-#define NUM_SERVICES 8
+#define NUM_SERVICES 6
 #define QUEUE_SIZE 20  // min value should be NUM_SERVICES
 // Note: queue sizes for individual services are not implemented yet. Currently there's just 1 queue, whose size
 //       is defined by QUEUE_SIZE 
@@ -111,11 +112,11 @@ typedef enum
 // services are added in numeric sequence (1,2,3,...) with increasing
 // priorities
 // the header file with the public function prototypes
-#define SERV_0_HEADER "KeyboardService.h"
+#define SERV_0_HEADER "MainService.h"
 // the name of the Init function
-#define SERV_0_INIT InitKeyboardService
+#define SERV_0_INIT InitMainService
 // the name of the run function
-#define SERV_0_RUN RunKeyboardService
+#define SERV_0_RUN RunMainService
 // How big should this services Queue be?
 // #define SERV_0_QUEUE_SIZE 5
 
@@ -140,11 +141,11 @@ typedef enum
 // These are the definitions for Service 2
 #if NUM_SERVICES > 2
 // the header file with the public function prototypes
-#define SERV_2_HEADER "TimerTestService.h"
+#define SERV_2_HEADER "CO2_Service.h"
 // the name of the Init function
-#define SERV_2_INIT InitTimerTestService
+#define SERV_2_INIT InitCO2Service
 // the name of the run function
-#define SERV_2_RUN RunTimerTestService
+#define SERV_2_RUN RunCO2Service
 // How big should this services Queue be?
 // #define SERV_2_QUEUE_SIZE 3
 #endif
@@ -153,11 +154,11 @@ typedef enum
 // These are the definitions for Service 3
 #if NUM_SERVICES > 3
 // the header file with the public function prototypes
-#define SERV_3_HEADER "CO2_Service.h"
+#define SERV_3_HEADER "HPM_Service.h"
 // the name of the Init function
-#define SERV_3_INIT InitCO2Service
+#define SERV_3_INIT InitHPMService
 // the name of the run function
-#define SERV_3_RUN RunCO2Service
+#define SERV_3_RUN RunHPMService
 // How big should this services Queue be?
 // #define SERV_3_QUEUE_SIZE 3
 #endif
@@ -166,11 +167,11 @@ typedef enum
 // These are the definitions for Service 4
 #if NUM_SERVICES > 4
 // the header file with the public function prototypes
-#define SERV_4_HEADER "HPM_Service.h"
+#define SERV_4_HEADER "SVM30Service.h"
 // the name of the Init function
-#define SERV_4_INIT InitHPMService
+#define SERV_4_INIT InitSVM30Service
 // the name of the run function
-#define SERV_4_RUN RunHPMService
+#define SERV_4_RUN RunSVM30Service
 // How big should this services Queue be?
 // #define SERV_4_QUEUE_SIZE 3
 #endif
@@ -179,11 +180,11 @@ typedef enum
 // These are the definitions for Service 5
 #if NUM_SERVICES > 5
 // the header file with the public function prototypes
-#define SERV_5_HEADER "mainService.h"
+#define SERV_5_HEADER "CloudService.h"
 // the name of the Init function
-#define SERV_5_INIT InitMainService
+#define SERV_5_INIT InitCloudService
 // the name of the run function
-#define SERV_5_RUN RunMainService
+#define SERV_5_RUN RunCloudService
 // How big should this services Queue be?
 #define SERV_5_QUEUE_SIZE 3
 #endif
@@ -192,11 +193,11 @@ typedef enum
 // These are the definitions for Service 6
 #if NUM_SERVICES > 6
 // the header file with the public function prototypes
-#define SERV_6_HEADER "SVM30Service.h"
+#define SERV_6_HEADER "TestHarnessService6.h"
 // the name of the Init function
-#define SERV_6_INIT InitSVM30Service
+#define SERV_6_INIT InitTestHarnessService6
 // the name of the run function
-#define SERV_6_RUN RunSVM30Service
+#define SERV_6_RUN RunTestHarnessService6
 // How big should this services Queue be?
 #define SERV_6_QUEUE_SIZE 3
 #endif
@@ -205,11 +206,11 @@ typedef enum
 // These are the definitions for Service 7
 #if NUM_SERVICES > 7
 // the header file with the public function prototypes
-#define SERV_7_HEADER "CloudService.h"
+#define SERV_7_HEADER "TestHarnessService7.h"
 // the name of the Init function
-#define SERV_7_INIT InitCloudService
+#define SERV_7_INIT InitTestHarnessService7
 // the name of the run function
-#define SERV_7_RUN RunCloudService
+#define SERV_7_RUN RunTestHarnessService7
 // How big should this services Queue be?
 #define SERV_7_QUEUE_SIZE 3
 #endif

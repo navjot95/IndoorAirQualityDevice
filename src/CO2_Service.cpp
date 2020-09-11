@@ -13,8 +13,8 @@
 #include "ES_Timers.h"
 
 /*----------------------------- Module Defines ----------------------------*/
-// TODO: Add 2 min of warmup time before reading the sensor
 typedef enum{
+  START_STATE,
   SEND_STATE,
   START_SM_STATE,
   SENSOR_NUM_STATE, 
@@ -30,6 +30,8 @@ typedef enum{
 #define SENSOR_NUM 0X86
 #define NUM_OF_EMPTY_BYTES 4
 #define MAX_RETRY_READS 2
+#define CO2_WARMUP_TIME 30000UL 
+#define CO2_POLLING_TIME 1000
 
 /*---------------------------- Module Functions ---------------------------*/
 bool retryRead(uint8_t *retryAttempts, uint8_t *checkSumVal);
@@ -39,7 +41,7 @@ void clearSerial2Buffer();
 
 /*---------------------------- Module Variables ---------------------------*/
 static uint8_t MyPriority;
-static statusState_t currStatusState = SEND_STATE;
+static statusState_t currStatusState = START_STATE;
 static IAQmode_t CO2_mode = STREAM_MODE; 
 static uint8_t numReads = 0; 
 static bool sensorConnected = false; 
@@ -65,10 +67,12 @@ bool InitCO2Service(uint8_t Priority)
 {
   MyPriority = Priority;
 
-  Serial2.begin(9600);
+  Serial2.begin(9600, SERIAL_8N1, 15, 32, false, 20000UL);
   while (!Serial2) {
     ;
   } 
+
+  memset(CO2RunAvg.buff, 0, sizeof(CO2RunAvg.buff));
   
   return true; 
 }
@@ -116,21 +120,32 @@ ES_Event_t RunCO2Service(ES_Event_t ThisEvent)
   static uint16_t sensorVal = 0; 
   static uint8_t checkSumVal = 0; 
 
-  if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == CO2_TIMER_NUM && currStatusState != SEND_STATE)
+  #ifdef DEBUG_SENSOR
+  if(ThisEvent.EventType == ES_SERIAL2)
+  {
+    printf("CO2 D: %x\n", ThisEvent.EventParam);
+  }
+  #endif
+
+
+  if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == CO2_TIMER_NUM && currStatusState != START_STATE && currStatusState != SEND_STATE)
   {
     retryRead(&retryAttempts, &checkSumVal);
     return ReturnEvent; 
   }
 
-  #ifdef DEBUG_SENSOR
-  if(ThisEvent.EventType == ES_SERIAL2)
-  {
-    printf("D: %x\n", ThisEvent.EventParam);
-  }
-  #endif
 
   switch (currStatusState)
   {
+    case START_STATE: 
+    {
+      if(ThisEvent.EventType == ES_READ_SENSOR)
+      {
+        ES_Timer_InitTimer(CO2_TIMER_NUM, CO2_WARMUP_TIME);
+        currStatusState = SEND_STATE; 
+      }
+      break;
+    }
     case SEND_STATE:
     {
       if(ThisEvent.EventType == ES_READ_SENSOR || (ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == CO2_TIMER_NUM))
@@ -142,8 +157,7 @@ ES_Event_t RunCO2Service(ES_Event_t ThisEvent)
         Serial2.write(0x79);
 
         currStatusState = START_SM_STATE; 
-        uint16_t waitTime = 1000 * (0x01 << retryAttempts);  // wait exponentially longer each time 
-        ES_Timer_InitTimer(CO2_TIMER_NUM, waitTime);
+        ES_Timer_InitTimer(CO2_TIMER_NUM, CO2_POLLING_TIME);
         checkSumVal = 0;  // just to be safe 
       }
 
@@ -175,7 +189,6 @@ ES_Event_t RunCO2Service(ES_Event_t ThisEvent)
         currStatusState = SENSOR_LOW_VAL_STATE;
         sensorVal = ThisEvent.EventParam << 8;  
         checkSumVal += (uint8_t)ThisEvent.EventParam; 
-        // printf("High Data: %d ", (uint8_t)ThisEvent.EventParam);
       }
       
       break;
@@ -188,7 +201,6 @@ ES_Event_t RunCO2Service(ES_Event_t ThisEvent)
         ThisEvent.EventParam &= 0xFF;  // clear out top byte just to be safe
         sensorVal |= ThisEvent.EventParam;  
         checkSumVal += (uint8_t)ThisEvent.EventParam; 
-        // printf("Low Data: %d ", (uint8_t)ThisEvent.EventParam);
       }
       
       break;
@@ -234,16 +246,15 @@ ES_Event_t RunCO2Service(ES_Event_t ThisEvent)
             retryAttempts = 0; 
             numReads = 0; 
             updateCO2Val(sensorVal); 
+            currStatusState = START_STATE; 
             ES_Timer_StopTimer(CO2_TIMER_NUM);
           }
           else
           {
-            ES_Timer_InitTimer(CO2_TIMER_NUM, 1000); 
+            currStatusState = SEND_STATE; 
           }
           
-          checkSumVal = 0; 
-          currStatusState = SEND_STATE; 
-          
+          checkSumVal = 0;           
         }
         else
         {
@@ -316,13 +327,14 @@ bool retryRead(uint8_t *retryAttempts, uint8_t *checkSumVal)
   {
     numReads = 0; 
     *retryAttempts = 0; 
+    currStatusState = START_STATE; 
     ES_Timer_StopTimer(CO2_TIMER_NUM);
     updateCO2Val(-1); 
     printf("Could not read from CO2 sensor\n");
     return false; 
   }
 
-  printf("Retrying\n");
+  printf("Retrying CO2\n");
   *retryAttempts = *retryAttempts + 1; 
   ES_Event_t newEvent = {.EventType=ES_READ_SENSOR};
   PostCO2Service(newEvent);

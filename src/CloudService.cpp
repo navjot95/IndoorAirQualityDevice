@@ -21,9 +21,13 @@
 
 /*----------------------------- Module Defines ----------------------------*/
 #define DEVICE "ESP32"
-#define MAX_WIFI_RETRIES 2
+#define MAX_WIFI_RETRIES 3 
 #define WIFI_POLLING_PERIOD 200  // ms
-#define WIFI_RETRY_TMOUT 5000u  // ms
+#define WIFI_RETRY_TMOUT 5000U  // ms
+#define TIME_SYNC_POLLING_PERIOD 200  // ms
+#define TIME_SYNC_TMOUT 15000U  // ms
+#define PUB_DELAY_PERIOD 500  // ms
+#define TM_RESYNC_PERIOD 3600L  // sec
 
 #define WIFI_SSID "PS Home"
 #define WIFI_PASSWORD "13Waheguru"
@@ -41,17 +45,20 @@ typedef enum
 {
   START_CONNECTION,
   CONNECTING_STATE,
-  SENDING_DATA_STATE
+  TIME_SYNCING_STATE,
+  PUBLISHING_STATE
 }statusState_t; 
 
 /*---------------------------- Module Functions ---------------------------*/
+void publishToCloud();
 void setupDataPt(); 
 void publishDataPt();
-void printLocalTime();
+bool timeForResync();
 
 /*---------------------------- Module Variables ---------------------------*/
 static uint8_t MyPriority;
 Point sensor("IAQ_Readings");  // Data point
+static RTC_DATA_ATTR time_t lastTmStamp = 0; 
 
 // InfluxDB client instance with preconfigured InfluxCloud certificate
 InfluxDBClient client(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN, InfluxDbCloud2CACert);
@@ -129,16 +136,17 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
           // Setup wifi
           WiFi.setAutoConnect(false);
           WiFi.mode(WIFI_STA);
-          // WiFi.setSleep(true); 
           WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
-          esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
-          printf("Connecting to wifi\n");
+          esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+          Serial.print("Connecting to wifi");
           ES_Timer_InitTimer(WIFI_TIMER_NUM, WIFI_POLLING_PERIOD); 
           currSMState = CONNECTING_STATE; 
         }
         else
         {
           wifiRetries = 0; 
+          ES_Event_t NewEvent = {.EventType=CLOUD_UPDATED_EVENT};
+          PostMainService(NewEvent); 
           printf("Could not connect with Wifi\n");
         }
       }
@@ -155,18 +163,20 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
           printf("Connected\n");
           tmoutCounts = 0; 
           wifiRetries = 0; 
-          currSMState = START_CONNECTION; 
 
-          client.setWriteOptions(WRITE_PRECISION, MAX_BATCH_SIZE, WRITE_BUFFER_SIZE, FLUSH_INTERVAL, false); 
-          timeSync(TZ_INFO, "pool.ntp.org"); // TODO: make unblocking and don't need to do this every time. Maybe once every hour
-          delay(500); 
-          setupDataPt(); 
-          publishDataPt(); // TODO: make into state machine so retry if failed once
-          ES_Event_t NewEvent = {.EventType=CLOUD_UPDATED_EVENT};
-          PostMainService(NewEvent); 
-          WiFi.disconnect(true);
-          WiFi.mode(WIFI_OFF);  
-
+          if(timeForResync())
+          {
+            configTzTime(TZ_INFO, "pool.ntp.org");
+            Serial.print("Syncing time");
+            currSMState = TIME_SYNCING_STATE; 
+            ES_Timer_InitTimer(WIFI_TIMER_NUM, TIME_SYNC_POLLING_PERIOD); 
+          }
+          else
+          {
+            Serial.println("Skipping sync");
+            currSMState = START_CONNECTION; 
+            publishToCloud();
+          }
         }else
         { 
           tmoutCounts++; 
@@ -190,13 +200,51 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
       break;
     }
     
-    case SENDING_DATA_STATE:
+    case TIME_SYNCING_STATE:
     {
-      if(ThisEvent.EventType == CLOUD_PUBLISH)
+      if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == WIFI_TIMER_NUM)
       {
-        return ReturnEvent; 
-      }
+        static uint8_t tmCount = 0; 
+        if(time(nullptr) < 1000000000UL)
+        {
+          // time not synced yet 
+          tmCount++; 
+          if(tmCount >= (TIME_SYNC_TMOUT / TIME_SYNC_POLLING_PERIOD))
+          {
+            // have waited too long
+            tmCount = 0; 
+            printf("Could not sync time\n");
+            currSMState = START_CONNECTION; 
+            ES_Event_t NewEvent = {.EventType=CLOUD_UPDATED_EVENT};
+            PostMainService(NewEvent); 
+            // todo: if isTimeSynced() still returns true, then try and publish data anyway
+          }else
+          {
+            Serial.print("."); 
+            ES_Timer_InitTimer(WIFI_TIMER_NUM, TIME_SYNC_POLLING_PERIOD);  
+          }
+        } else
+        {
+          lastTmStamp = time(nullptr); 
 
+          // Show time
+          tmCount = 0; 
+          Serial.print("\nSynchronized time: ");
+          Serial.println(ctime(&lastTmStamp));
+          currSMState = PUBLISHING_STATE; 
+          ES_Timer_InitTimer(WIFI_TIMER_NUM, PUB_DELAY_PERIOD); 
+        }
+      }
+      break;
+    }
+
+    case PUBLISHING_STATE:
+    {
+      if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == WIFI_TIMER_NUM)
+      {
+        currSMState = START_CONNECTION; 
+        publishToCloud(); 
+      }
       break;
     }
   }
@@ -220,8 +268,20 @@ void updateCloudSensorVals(IAQsensorVals_t *sensorReads)
 /***************************************************************************
  private functions
  ***************************************************************************/
+void publishToCloud()
+{
+  setupDataPt(); 
+  publishDataPt(); // TODO: make into state machine so retry if failed once
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);  
+  ES_Event_t NewEvent = {.EventType=CLOUD_UPDATED_EVENT};
+  PostMainService(NewEvent); 
+}
+
 void setupDataPt()
 {
+  client.setWriteOptions(WRITE_PRECISION, MAX_BATCH_SIZE, WRITE_BUFFER_SIZE, FLUSH_INTERVAL, false); 
+
   // Add tags
   sensor.clearTags(); 
   char buff[25];
@@ -229,13 +289,13 @@ void setupDataPt()
   sensor.addTag("chipID", buff);
 
   // Check server connection
-  if (client.validateConnection()) {
-    Serial.print("Connected to InfluxDB: ");
-    Serial.println(client.getServerUrl());
-  } else {
-    Serial.print("InfluxDB connection failed: ");
-    Serial.println(client.getLastErrorMessage());
-  }
+  // if (client.validateConnection()) {
+  //   Serial.print("Connected to InfluxDB: ");
+  //   Serial.println(client.getServerUrl());
+  // } else {
+  //   Serial.print("InfluxDB connection failed: ");
+  //   Serial.println(client.getLastErrorMessage());
+  // }
 }
 
 void publishDataPt()
@@ -264,19 +324,20 @@ void publishDataPt()
       Serial.println("It worked 2nd time"); 
     }
   }
-
 }
 
-void printLocalTime()
+bool timeForResync()
 {
-  struct tm timeinfo;
-  if(!getLocalTime(&timeinfo)){
-    Serial.println("Failed to obtain time");
-    return;
+  time_t now = time(nullptr); 
+  
+  if(lastTmStamp == 0 || difftime(now, lastTmStamp) >=  TM_RESYNC_PERIOD)
+  {
+    lastTmStamp = now; 
+    return true; 
   }
-
-  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+  return false; 
 }
+
 
 /*------------------------------- Footnotes -------------------------------*/
 /*------------------------------ End of file ------------------------------*/

@@ -27,7 +27,6 @@ void updateScreenSensorVals(IAQsensorVals_t *newVals, bool forceFullRefresh);
 void ePaperPrintfAlert(const char * title, const char * line1, const char * line2); 
 void ePaperChangeHdln(const char *txt, bool updateScrn);
 void ePaperChangeMode(IAQmode_t currMode);
-bool updateEpaperTime();  // TODO: Don't think this needs to be a public function
 
 #endif /* EPaperDrv_H */
 

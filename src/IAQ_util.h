@@ -11,7 +11,6 @@
 #include <rom/rtc.h>
 #include <time.h>
 
-#define PWR_RESET 1
 #define RUN_AVG_BUFFER_LEN 8  // size of running average buffer MAX VALUE: 255
 
 #ifdef DEBUG
