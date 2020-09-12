@@ -85,9 +85,12 @@ uint8_t getBatPerct()
 
 uint16_t getBatVolt()
 {
+  uint16_t batVal = (analogRead(BAT_PIN) * 2) - BAT_OFFSET;
+  
   static runAvg_t batRunAvg = {.runAvgSum=32000, .buff={4000, 4000, 4000, 4000, 4000, 4000, 4000, 4000}, .oldestIdx=0};
-  updateRunAvg(&batRunAvg, (analogRead(BAT_PIN) * 2) - BAT_OFFSET);
-
-  return round((float)batRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);; 
+  updateRunAvg(&batRunAvg, batVal);
+  
+  uint16_t currAvg = round((float)batRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
+  return currAvg;
 }
 

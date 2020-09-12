@@ -23,11 +23,12 @@
 #define ALL_SENSORS_READ 0x07
 #define BAT_LOW_THRES 3500  // voltage at which to go into hibernation mode
 #define AUTO_MODE_TIMER_LEN 300000UL  // Time in ms
-#define STREAM_MODE_TIMER_LEN 6000U  // Time in ms
+#define STREAM_MODE_TIMER_LEN 6000U  // Time in ms. Screen update period
 #define WARMUP_TIMER_LEN 40000UL  //186000UL  // Time in ms
 #define WIFI_TIMEOUT_LEN  36000UL  // ms
 #define CLOUD_COUNTER_LEN 50  // Cloud updates every this many screen refreshes (make 5+)   
 #define BAT_POLLING_PERIOD 1000  // updates battery run avg and low volt check at this interval 
+
 
 typedef enum
 {
@@ -96,7 +97,7 @@ bool InitMainService(uint8_t Priority)
   else 
     strcpy(str, "Time not synced");
 
-  printf("Start time: %s\n", str); 
+  IAQ_PRINTF("Start time: %s\n", str); 
 
   // post the initial transition event
   ThisEvent.EventType = ES_INIT;
@@ -199,9 +200,9 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
         changeSensorsIAQMode(currIAQMode); 
         startSensorsSM(); 
         ES_TimerReturn_t returnVal = ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, timerLen);  // CO2 sensor has 3 min warmup time
-        printf("Going into %s\n", (currIAQMode == STREAM_MODE)? "STREAM MODE" : "AUTO MODE"); 
+        IAQ_PRINTF("Going into %s\n", (currIAQMode == STREAM_MODE)? "STREAM MODE" : "AUTO MODE"); 
         if(returnVal == ES_Timer_ERR)
-          printf("Main timer err\n");
+          IAQ_PRINTF("Main timer err\n");
       }
     }
 
@@ -219,19 +220,19 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
       } else if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == MAIN_SERV_TIMER_NUM)
       {
         // 1+ sensor or cloud service didn't respond in time
-        printf("Main backup timer timedout\n");
+        IAQ_PRINTF("Main backup timer timedout\n");
         shutdownIAQ(true); 
       }
       else if(ThisEvent.EventType == ES_SW_BUTTON_PRESS && ThisEvent.EventParam == SHORT_BT_PRESS)
       {
-        printf("Changing to stream from auto\n");
+        IAQ_PRINTF("Changing to stream from auto\n");
 
         currSMState = STREAM_STATE; 
         changeSensorsIAQMode(STREAM_MODE); 
 
         if(sensorReads_flag != 0)
         {
-          printf("Wait time extended\n");
+          IAQ_PRINTF("Wait time extended\n");
           ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, WARMUP_TIMER_LEN);
           startSensorsSM();  // one of the sensors finished, so just restart warmup for simplicity 
         }
@@ -267,7 +268,7 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
         }
         else
         {
-          printf("Time not synced, so connecting to wifi\n");
+          IAQ_PRINTF("Time not synced, so connecting to wifi\n");
           if(cloudUpdateCounter % CLOUD_COUNTER_LEN == 0)
           {
             updateCloudSensorVals(&sensorReads); 
@@ -277,7 +278,6 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
             ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, WIFI_TIMEOUT_LEN);  // serves as backup timeout timer
           }else
           {
-            printf("Skipping cloud update\n");
             updateScreenSensorVals(&sensorReads, false);
           } 
         }
@@ -287,7 +287,7 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
 
       }else if(ThisEvent.EventType == ES_SW_BUTTON_PRESS && ThisEvent.EventParam == SHORT_BT_PRESS)
       {
-        printf("Changing to Auto from stream\n");
+        IAQ_PRINTF("Changing to Auto from stream\n");
         currSMState = AUTO_STATE; 
         changeSensorsIAQMode(AUTO_MODE); 
         ePaperChangeMode(AUTO_MODE);
@@ -363,10 +363,10 @@ bool mainSMinStreamMode()
 // timedShtdwn as true means timed sleep 
 void shutdownIAQ(bool timedShtdwn)
 {
-  printf("Going into deep sleep\n");
+  IAQ_PRINTF("Going into deep sleep\n");
   char str[20]; 
   getCurrTime(str, 20); 
-  printf(str); 
+  IAQ_PRINTF(str); 
 
   stopHPMMeasurements();  // turns off HPM fan
   WiFi.disconnect(true);
@@ -434,7 +434,7 @@ void sensorsPwrEnable(bool turnOn)
 // shuts down device because battery voltage too low
 void shutdownBat()
 {
-  printf("Low bat. Going to sleep.\n");
+  IAQ_PRINTF("Low bat. Going to sleep.\n");
   ePaperChangeMode(NO_MODE); 
   ePaperChangeHdln("Device OFF", false);
   ePaperPrintfAlert("Low Battery", "Please plug in and press", "button when charged.");

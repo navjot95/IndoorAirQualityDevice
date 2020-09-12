@@ -3,7 +3,9 @@
    CloudService.c
 
  Description
-   Handels communication with cloud influxdb 
+   Handels wifi connection and communication with cloud influxdb. If main SM is in stream mode, 
+   then values are uploaded in batches of 3. In auto mode, values are uploaded
+   as they come in.  
 
  Notes
 ****************************************************************************/
@@ -141,7 +143,7 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
           WiFi.mode(WIFI_STA);
           WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
           esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
-          Serial.print("Connecting to wifi");
+          IAQ_PRINTF("Connecting to wifi");
           ES_Timer_InitTimer(WIFI_TIMER_NUM, WIFI_POLLING_PERIOD); 
           currSMState = CONNECTING_STATE; 
         }
@@ -149,7 +151,7 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
         {
           wifiRetries = 0; 
           stopCloudSM();
-          printf("Could not connect to Wifi\n");
+          IAQ_PRINTF("Could not connect to Wifi\n");
         }
       }
       break;
@@ -162,7 +164,7 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
         static uint8_t tmoutCounts = 0; 
         if(WiFi.status() == WL_CONNECTED)
         {
-          printf("Connected\n");
+          IAQ_PRINTF("Connected\n");
           tmoutCounts = 0; 
           wifiRetries = 0; 
 
@@ -174,7 +176,7 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
           }
           else
           {
-            Serial.println("Skipping sync");
+            //skipping time sync
             currSMState = PUBLISHING_STATE; 
             ES_Event_t newEvent = {.EventType=CLOUD_PUB_EVENT}; 
             RunCloudService(newEvent);
@@ -189,11 +191,11 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
             currSMState = START_CONNECTION; 
             ES_Event_t newEvent = {.EventType=ES_INIT}; 
             PostCloudService(newEvent); 
-            Serial.println("Retrying");
+            IAQ_PRINTF("Retrying");
           }
           else
           {
-            Serial.print(".");
+            IAQ_PRINTF(".");
             ES_Timer_InitTimer(WIFI_TIMER_NUM, WIFI_POLLING_PERIOD); 
           }
         }
@@ -215,12 +217,12 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
           {
             // have waited too long
             tmCount = 0; 
-            printf("Could not update time\n");
+            IAQ_PRINTF("Could not update time\n");
             currSMState = START_CONNECTION; 
             stopCloudSM(); 
           }else
           {
-            Serial.print("."); 
+            IAQ_PRINTF("."); 
             ES_Timer_InitTimer(WIFI_TIMER_NUM, TIME_SYNC_POLLING_PERIOD);  
           }
         } else
@@ -229,8 +231,8 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
 
           // Show time
           tmCount = 0; 
-          Serial.print("\nSynchronized time: ");
-          Serial.println(ctime(&lastTmStamp));
+          IAQ_PRINTF("\nSynchronized time: ");
+          IAQ_PRINTF(ctime(&lastTmStamp));
           currSMState = PUBLISHING_STATE; 
           ES_Timer_InitTimer(WIFI_TIMER_NUM, PUB_DELAY_PERIOD); 
         }
@@ -247,7 +249,7 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
         if(!publishDataPt() && pubRetry == 0)
         {
           pubRetry++; 
-          printf("Retrying influxdb pub\n");
+          IAQ_PRINTF("Retrying influxdb pub\n");
           ES_Timer_InitTimer(WIFI_TIMER_NUM, PUB_DELAY_PERIOD*4); 
         } 
         else
@@ -308,20 +310,21 @@ void setupDataPt()
 
 bool publishDataPt()
 {
-  // Print what are we exactly writing
-  Serial.print("Writing to influx: ");
-  Serial.println(sensor.toLineProtocol());
-
   if ((WiFi.RSSI() == 0) && (WiFi.status() != WL_CONNECTED)) {
-    Serial.println("Wifi connection lost");
+    IAQ_PRINTF("Wifi connection lost");
   }
 
   // Write point
+  time_t tnow = time(nullptr);
+  sensor.setTime(tnow);  
+  // Print what are we exactly writing
+  Serial.printf("Writing to influx: ");
+  Serial.println(sensor.toLineProtocol()); 
   if (client.writePoint(sensor)) {
     return true; 
   }
-  Serial.print("InfluxDB write failed: ");
-  Serial.println(client.getLastErrorMessage());
+  Serial.printf("InfluxDB write failed: ");
+  Serial.println(client.getLastErrorMessage()); 
   return false; 
 }
 

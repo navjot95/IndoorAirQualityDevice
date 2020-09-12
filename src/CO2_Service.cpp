@@ -220,7 +220,7 @@ ES_Event_t RunCO2Service(ES_Event_t ThisEvent)
         else if(counter > NUM_OF_EMPTY_BYTES)
         {
           counter = 0; 
-          printf("Too many empty bytes from CO2 reading");
+          IAQ_PRINTF("Too many empty bytes from CO2 reading");
           retryRead(&retryAttempts, &checkSumVal); 
         }
       }
@@ -301,7 +301,7 @@ void getCO2Avg(int16_t *CO2Avg)
     *CO2Avg = -1; 
   }
 
-  printf("CO2 run avg: %d \n", *CO2Avg); 
+  IAQ_PRINTF("CO2 run avg: %d \n", *CO2Avg); 
 }
 
 
@@ -330,11 +330,11 @@ bool retryRead(uint8_t *retryAttempts, uint8_t *checkSumVal)
     currStatusState = START_STATE; 
     ES_Timer_StopTimer(CO2_TIMER_NUM);
     updateCO2Val(-1); 
-    printf("Could not read from CO2 sensor\n");
+    IAQ_PRINTF("Could not read from CO2 sensor\n");
     return false; 
   }
 
-  printf("Retrying CO2\n");
+  IAQ_PRINTF("Retrying CO2\n");
   *retryAttempts = *retryAttempts + 1; 
   ES_Event_t newEvent = {.EventType=ES_READ_SENSOR};
   PostCO2Service(newEvent);
@@ -351,7 +351,7 @@ void clearSerial2Buffer()
 {
   while(Serial2.available())
   {
-    printf("Cleared data CO2\n");
+    IAQ_PRINTF("Cleared data CO2\n");
     Serial2.read(); 
   }
 }

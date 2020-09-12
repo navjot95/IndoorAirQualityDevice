@@ -89,7 +89,6 @@ bool InitSVM30Service(uint8_t Priority)
 {
   MyPriority = Priority;
   Wire.begin();
-
   memset(eCO2RunAvg.buff, 0, sizeof(eCO2RunAvg.buff));
   memset(tVOCRunAvg.buff, 0, sizeof(tVOCRunAvg.buff));
   memset(tempRunAvg.buff, 0, sizeof(tempRunAvg.buff));
@@ -303,7 +302,7 @@ ES_Event_t RunSVM30Service(ES_Event_t ThisEvent)
               int16_t avgrh  = round((float)rhRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
 
               updateSVM30Vals(avgeCO2, avgtVOC, avgtm, avgrh); 
-              printf("Avgs:  eCO2:%d  tVOC:%d  tm:%d  rh:%d\n", avgeCO2, avgtVOC, avgtm, avgrh); 
+              IAQ_PRINTF("Avgs:  eCO2:%d  tVOC:%d  tm:%d  rh:%d\n", avgeCO2, avgtVOC, avgtm, avgrh); 
 
               retryAttempts = 0; 
               numReads = 0; 
@@ -354,7 +353,7 @@ void getSVM30Avg(int16_t *eCO2Avg, int16_t *tVOCAvg, int16_t *tpAvg, int16_t *rh
     *rhAvg = -1; 
   }
 
-  printf("eCO2 run avg: %d    tVOC run avg: %d     tp run avg: %d     rh run avg: %d\n", *eCO2Avg, *tVOCAvg, *tpAvg, *rhAvg); 
+  IAQ_PRINTF("eCO2 run avg: %d    tVOC run avg: %d     tp run avg: %d     rh run avg: %d\n", *eCO2Avg, *tVOCAvg, *tpAvg, *rhAvg); 
 }
 
 
@@ -409,11 +408,11 @@ bool retryRead(uint8_t *retryAttempts, uint8_t *bytesRead, uint8_t *data_idx, bo
     ES_Timer_StopTimer(SVM30_TIMER2_NUM); 
     *sensorFlag = SGP30_FLAG; 
     updateSVM30Vals(-1, -1, -1, -1); 
-    printf("Could not read from SVM30 sensor\n");
+    IAQ_PRINTF("Could not read from SVM30 sensor\n");
     return false; 
   }
 
-  printf("Retrying SVM30 sensor: %d\n", *sensorFlag);
+  IAQ_PRINTF("Retrying SVM30 sensor: %d\n", *sensorFlag);
   ES_Timer_InitTimer(SVM30_TIMER_NUM, 200);
   *retryAttempts = *retryAttempts + 1; 
   return true; 
@@ -474,7 +473,7 @@ void clearI2CBuffer()
 {
   while(Wire.available())
   {
-    printf("Cleared data CO2\n");
+    IAQ_PRINTF("Cleared data CO2\n");
     Wire.read(); 
   }
 }

@@ -8,18 +8,23 @@
 #ifndef IAQUTIL_H
 #define IAQUTIL_H
 
+#include <HardwareSerial.h>
 #include <rom/rtc.h>
 #include <time.h>
 
 #define RUN_AVG_BUFFER_LEN 8  // size of running average buffer MAX VALUE: 255
 
-#ifdef DEBUG
-#define DEBUG_TEST 1
+#define IAQ_DEBUG_ENABLE  // Uncomment this to enable debugging printfs
+#ifdef IAQ_DEBUG_ENABLE
+#define DEBUG_CHECK 1
 #else
-#define DEBUG_TEST 0
+#define DEBUG_CHECK 0
 #endif
 
-#define IAQ_PRINTF(fmt, ...) do{ if (DEBUG_TEST) Serial.printf("DEBUG %s:%d:%s(): " fmt, __FILE__, __LINE__, __func__, __VA_ARGS__); } while (0)
+#define IAQ_PRINTF(fmt, ...) do{ if (DEBUG_CHECK) Serial.printf(fmt, ## __VA_ARGS__); } while (0)
+#define IAQ_PRINTFV(fmt, ...) do{ if (DEBUG_CHECK) Serial.printf("[D] %s:%d:%s(): " fmt, __FILE__, __LINE__, __func__, ## __VA_ARGS__); } while (0)
+
+
 
 typedef enum
 {

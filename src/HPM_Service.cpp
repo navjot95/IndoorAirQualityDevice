@@ -224,7 +224,7 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
       {
         currCommSMState = CMD_WAIT_START_STATE; 
         retryRead(&retryAttempts, &checkSumVal, false); 
-        printf("Err: Comm SM didn't respond\n");
+        IAQ_PRINTF("Err: Comm SM didn't respond\n");
       }
       else
       {
@@ -464,8 +464,8 @@ ES_Event_t RunHPMService(ES_Event_t ThisEvent)
           int16_t avgPM10 =  round((float)pm10RunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
           int16_t avgPM25  = round((float)pm25RunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
 
-          printf("Avg PM 10: %d, sum: %d\n", avgPM10, pm10RunAvg.runAvgSum); 
-          printf("Avg PM 2.5: %d, sum: %d\n", avgPM25, pm25RunAvg.runAvgSum); 
+          IAQ_PRINTF("Avg PM 10: %d, sum: %d  ", avgPM10, pm10RunAvg.runAvgSum); 
+          IAQ_PRINTF("Avg PM 2.5: %d, sum: %d\n", avgPM25, pm25RunAvg.runAvgSum); 
           
           updateHPMVal(avgPM25, avgPM10);
 
@@ -513,8 +513,8 @@ void getPMAvg(int16_t *pm10Avg, int16_t *pm25Avg)
     *pm25Avg = -1; 
   }
 
-  printf("pm10 run avg: %d  ", *pm10Avg); 
-  printf("pm25 run avg: %d\n", *pm25Avg);
+  IAQ_PRINTF("pm10 run avg: %d  ", *pm10Avg); 
+  IAQ_PRINTF("pm25 run avg: %d\n", *pm25Avg);
 }
 
 
@@ -552,7 +552,7 @@ bool retryRead(uint8_t *retryAttempts, uint16_t *checkSumVal, bool skipWarmup)
     numGoodReads = 0; 
     *retryAttempts = 0; 
     updateHPMVal(-1, -1);
-    printf("Could not read from HPM sensor\n");
+    IAQ_PRINTF("Could not read from HPM sensor\n");
     return false; 
   }
 
@@ -569,11 +569,11 @@ bool retryRead(uint8_t *retryAttempts, uint16_t *checkSumVal, bool skipWarmup)
 void clearSerial1Buffer()
 {
   if(Serial1.available())
-    printf("Cleared data HPM\n");
+    IAQ_PRINTF("Cleared data HPM\n");
 
   while(Serial1.available())
   {
-    printf("%x", Serial1.read()); 
+    ; 
   }
 }
 
@@ -690,7 +690,7 @@ ES_Event_t Comm_StateMachine(ES_Event_t ThisEvent, void (*cmdFunc)())
         if(!retryComm(&retryAttempts, cmdFunc))
         {
           returnEvent.EventType = ES_FAIL; 
-          printf("Comm fail\n");
+          IAQ_PRINTF("Comm fail\n");
         }
       }
       else if(ThisEvent.EventType == ES_SERIAL1 && ThisEvent.EventParam == POS_ACK)
@@ -721,7 +721,7 @@ bool retryComm(uint8_t *retryAttempts, void (*cmdFunc)())
   {
     *retryAttempts = 0; 
     ES_Timer_StopTimer(COMMSM_TIMER_NUM);
-    printf("Failed sub comm SM\n");
+    IAQ_PRINTF("Failed sub comm SM\n");
     return false; 
   }
 
