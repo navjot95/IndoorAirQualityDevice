@@ -19,8 +19,7 @@
 #define DEBUG_TEST 0
 #endif
 
-#define IAQ_PRINTF(fmt, ...) \
-        do { if (DEBUG_TEST) Serial.printf("DEBUG %s:%d:%s(): " fmt, __FILE__, __LINE__, __func__, __VA_ARGS__); } while (0)
+#define IAQ_PRINTF(fmt, ...) do{ if (DEBUG_TEST) Serial.printf("DEBUG %s:%d:%s(): " fmt, __FILE__, __LINE__, __func__, __VA_ARGS__); } while (0)
 
 typedef enum
 {

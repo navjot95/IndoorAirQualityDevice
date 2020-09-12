@@ -12,7 +12,6 @@ bool PostCloudService(ES_Event_t ThisEvent);
 ES_Event_t RunCloudService(ES_Event_t ThisEvent);
 
 void updateCloudSensorVals(IAQsensorVals_t *sensorReads);
-void printLocalTime();
 
 #endif /* CloudServ_H */
 

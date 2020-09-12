@@ -39,7 +39,6 @@
 
 #define MAX_RETRY_ATTEMPTS 2
 #define SVM30_SAMPLE_READS 16  // total samples to read, including NUM_SAMPLES_SKIP
-#define NUM_SAMPLES_SKIP 8  // Let's sensor's baseline algo settle before recording
 #define I2C_SUCCESS 0
 
 typedef enum{

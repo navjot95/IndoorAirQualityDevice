@@ -43,10 +43,8 @@ typedef enum
   ES_READ_SENSOR,               /* command to send to sensor to read its value(s) */
   COMMSM_SEND,
   SENSORS_READ_EVENT,
-  WIFI_CONNECT,
-  CLOUD_PUBLISH, 
+  CLOUD_PUB_EVENT,
   CLOUD_UPDATED_EVENT,
-  LOW_BAT_EVENT
 }ES_EventType_t;
 
 
@@ -55,7 +53,7 @@ typedef enum
 // the functions at the beginning of the list are checked first 
 
 //EventCheckerKeyBoard, EventCheckerButton
-#define EVENT_CHECKER_LIST EventCheckerBat, EventCheckerButton, EventCheckerCO2, EventCheckerHPM, EventChecker_SVM30,
+#define EVENT_CHECKER_LIST EventCheckerButton, EventCheckerCO2, EventCheckerHPM, EventChecker_SVM30,
 
 
 
@@ -73,7 +71,7 @@ typedef enum
 #define TIMER4_RESP_FUNC PostSVM30Service
 #define TIMER5_RESP_FUNC PostSVM30Service
 #define TIMER6_RESP_FUNC PostCloudService
-#define TIMER7_RESP_FUNC TIMER_UNUSED
+#define TIMER7_RESP_FUNC PostMainService
 #define TIMER8_RESP_FUNC TIMER_UNUSED
 #define TIMER9_RESP_FUNC TIMER_UNUSED
 #define TIMER10_RESP_FUNC TIMER_UNUSED
@@ -90,6 +88,7 @@ typedef enum
 #define SVM30_TIMER_NUM 4
 #define SVM30_TIMER2_NUM 5
 #define WIFI_TIMER_NUM 6
+#define BAT_TIMER_NUM 7
 
 
 /********************************Services********************************************/

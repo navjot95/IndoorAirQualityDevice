@@ -201,7 +201,6 @@ void ePaperChangeMode(IAQmode_t currMode)
   {
     epd.printf("Auto", &calibri_10ptFont, HDLN_X_OFFSET-calibri_10ptFont.charHeight, SCREEN_HEIGHT-28);
   }
-  
 }
 
 
@@ -223,7 +222,6 @@ bool updateEpaperTime()
   }
   else 
   {
-    printf("Could not update time\n");
     returnVal = false; 
     sprintf(str, "00/00 00:00 AM");
   }

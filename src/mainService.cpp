@@ -26,7 +26,8 @@
 #define STREAM_MODE_TIMER_LEN 6000U  // Time in ms
 #define WARMUP_TIMER_LEN 40000UL  //186000UL  // Time in ms
 #define WIFI_TIMEOUT_LEN  36000UL  // ms
-#define CLOUD_COUNTER_LEN 10  // Cloud updates every this many screen refreshes   
+#define CLOUD_COUNTER_LEN 50  // Cloud updates every this many screen refreshes (make 5+)   
+#define BAT_POLLING_PERIOD 1000  // updates battery run avg and low volt check at this interval 
 
 typedef enum
 {
@@ -80,14 +81,11 @@ bool InitMainService(uint8_t Priority)
   ES_Event_t ThisEvent;
   MyPriority = Priority;
   
-  if(EventCheckerBat())
-  {
-    shutdownBat(); 
-  }
   initPins(); 
   initePaper();
   adc_power_on();
   btStop();  // Make sure bluetooth is off
+  ES_Timer_InitTimer(BAT_TIMER_NUM, BAT_POLLING_PERIOD); 
 
   setenv("TZ", "PST8PDT", 1); // set the correct timezone for time.h  
   tzset();
@@ -151,11 +149,15 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
 {
   ES_Event_t ReturnEvent;
   ReturnEvent.EventType = ES_NO_EVENT; // assume no errors
-  static uint8_t cloudUpdateCounter = 1; 
+  static uint8_t cloudUpdateCounter = 0; 
 
-  if(ThisEvent.EventType == LOW_BAT_EVENT)
+  if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == BAT_TIMER_NUM)
   {
-    shutdownBat();     
+    ES_Timer_InitTimer(BAT_TIMER_NUM, BAT_POLLING_PERIOD); 
+    if(getBatVolt() < BAT_LOW_THRES)
+    {
+      shutdownBat(); 
+    }    
   }
   if(ThisEvent.EventType == ES_SW_BUTTON_PRESS && ThisEvent.EventParam == LONG_BT_PRESS)
   {
@@ -182,16 +184,12 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
           currSMState = AUTO_STATE; 
           timerLen = AUTO_MODE_TIMER_LEN;  // backup timer 
           currIAQMode = AUTO_MODE; 
-          
         } 
         else
         {
           currSMState = STREAM_STATE; 
           timerLen = WARMUP_TIMER_LEN;  // polling timer
           currIAQMode = STREAM_MODE; 
-          // if(rtc_get_reset_reason() == POWERON_RESET)
-          //   hdlnLabel = "Reading...";  
-          // else 
           hdlnLabel = "Warming up..."; 
           ePaperChangeHdln(hdlnLabel, true); 
         }
@@ -256,7 +254,6 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
         getPMAvg(&(sensorReads.PM10), &(sensorReads.PM25));
         getSVM30Avg(&(sensorReads.eCO2), &(sensorReads.tVOC), &(sensorReads.temp), &(sensorReads.rh)); 
         getCO2Avg(&(sensorReads.CO2));
-        //TODO: Don't want to keep retrying wifi if not connected
 
         if(isTimeSynced())
         {
@@ -270,18 +267,25 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
         }
         else
         {
-          printf("time not synced\n");
-          updateCloudSensorVals(&sensorReads); 
-          ES_Event_t newEvent = {.EventType=ES_INIT};
-          PostCloudService(newEvent);
-          currSMState = STREAM_CLOUD_STATE; 
-          ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, WIFI_TIMEOUT_LEN);
+          printf("Time not synced, so connecting to wifi\n");
+          if(cloudUpdateCounter % CLOUD_COUNTER_LEN == 0)
+          {
+            updateCloudSensorVals(&sensorReads); 
+            ES_Event_t newEvent = {.EventType=ES_INIT};
+            PostCloudService(newEvent);
+            currSMState = STREAM_CLOUD_STATE; 
+            ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, WIFI_TIMEOUT_LEN);  // serves as backup timeout timer
+          }else
+          {
+            printf("Skipping cloud update\n");
+            updateScreenSensorVals(&sensorReads, false);
+          } 
         }
         cloudUpdateCounter++; 
         if(cloudUpdateCounter == CLOUD_COUNTER_LEN)
           cloudUpdateCounter = 0; 
-      }
-      else if(ThisEvent.EventType == ES_SW_BUTTON_PRESS && ThisEvent.EventParam == SHORT_BT_PRESS)
+
+      }else if(ThisEvent.EventType == ES_SW_BUTTON_PRESS && ThisEvent.EventParam == SHORT_BT_PRESS)
       {
         printf("Changing to Auto from stream\n");
         currSMState = AUTO_STATE; 
@@ -296,19 +300,19 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
 
     case STREAM_CLOUD_STATE:
     {
-      if(ThisEvent.EventType == CLOUD_UPDATED_EVENT )
+      if(ThisEvent.EventType == CLOUD_UPDATED_EVENT || (ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == MAIN_SERV_TIMER_NUM))
       {
         updateScreenSensorVals(&sensorReads, false);
         currSMState = STREAM_STATE; 
         ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, STREAM_MODE_TIMER_LEN);
       }
-      else if(ThisEvent.EventType == ES_TIMEOUT && ThisEvent.EventParam == MAIN_SERV_TIMER_NUM)
+      else if(ThisEvent.EventType == ES_SW_BUTTON_PRESS && ThisEvent.EventParam == SHORT_BT_PRESS)
       {
-        printf("no wifi\n");
-        ePaperChangeHdln("No Wifi", false); 
-        updateScreenSensorVals(&sensorReads, false);
-        currSMState = STREAM_STATE; 
-        ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, STREAM_MODE_TIMER_LEN);
+        currSMState = AUTO_STATE; 
+        changeSensorsIAQMode(AUTO_MODE); 
+        ePaperChangeMode(AUTO_MODE);
+        ePaperChangeHdln("Reading...", true); 
+        ES_Timer_InitTimer(MAIN_SERV_TIMER_NUM, AUTO_MODE_TIMER_LEN); 
       }
     }
   }
@@ -342,20 +346,13 @@ void updateSVM30Vals(int16_t eCO2_newVal, int16_t tVOC_newVal, int16_t tm_newVal
   setFlagBit(thisSensor); 
 } 
 
-
-bool EventCheckerBat()
+bool mainSMinStreamMode()
 {
-  // return false;  //! BATTERY CHECK IS DISABLED 
-  uint16_t batV = getBatVolt(); 
-  if(batV < BAT_LOW_THRES)
-  {
-    ES_Event_t NewEvent = {.EventType=LOW_BAT_EVENT}; 
-    PostMainService(NewEvent); 
+  if(currSMState == STREAM_STATE)
     return true; 
-  }
-  return false; 
+  else 
+    return false; 
 }
-
 
 
 
