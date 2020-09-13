@@ -30,7 +30,7 @@ typedef enum{
 #define SENSOR_NUM 0X86
 #define NUM_OF_EMPTY_BYTES 4
 #define MAX_RETRY_READS 2
-#define CO2_WARMUP_TIME 30000UL 
+#define CO2_WARMUP_TIME 180000U
 #define CO2_POLLING_TIME 1000
 
 /*---------------------------- Module Functions ---------------------------*/

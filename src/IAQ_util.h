@@ -14,7 +14,7 @@
 
 #define RUN_AVG_BUFFER_LEN 8  // size of running average buffer MAX VALUE: 255
 
-#define IAQ_DEBUG_ENABLE  // Uncomment this to enable debugging printfs
+// #define IAQ_DEBUG_ENABLE  // Uncomment this to enable debugging printfs
 #ifdef IAQ_DEBUG_ENABLE
 #define DEBUG_CHECK 1
 #else

@@ -10,22 +10,23 @@
 /*----------------------------- Include Files -----------------------------*/
 #include "MainService.h"
 #include "ePaperDriver.h"
+#include "IAQ_util.h"
 #include "ES_framework.h"
 #include "ES_Timers.h"
 #include "CloudService.h"
-#include "WiFi.h"
-#include "IAQ_util.h"
-#include "driver/adc.h"
+#include <WiFi.h>
+#include <driver/adc.h>
 #include <esp_wifi.h>
 #include <esp_bt.h>
+
 
 /*----------------------------- Module Defines ----------------------------*/
 #define ALL_SENSORS_READ 0x07
 #define BAT_LOW_THRES 3500  // voltage at which to go into hibernation mode
-#define AUTO_MODE_TIMER_LEN 300000UL  // Time in ms
+#define AUTO_MODE_TIMER_LEN 300000U  // Time in ms
 #define STREAM_MODE_TIMER_LEN 6000U  // Time in ms. Screen update period
-#define WARMUP_TIMER_LEN 40000UL  //186000UL  // Time in ms
-#define WIFI_TIMEOUT_LEN  36000UL  // ms
+#define WARMUP_TIMER_LEN 197000U  // Time in ms 3mins for CO2 sensor + 16 secs for polling 16 vals
+#define WIFI_TIMEOUT_LEN  36000U  // ms
 #define CLOUD_COUNTER_LEN 50  // Cloud updates every this many screen refreshes (make 5+)   
 #define BAT_POLLING_PERIOD 1000  // updates battery run avg and low volt check at this interval 
 
@@ -87,6 +88,11 @@ bool InitMainService(uint8_t Priority)
   adc_power_on();
   btStop();  // Make sure bluetooth is off
   ES_Timer_InitTimer(BAT_TIMER_NUM, BAT_POLLING_PERIOD); 
+
+  for(uint8_t i=0; i<RUN_AVG_BUFFER_LEN; i++)
+  {
+    getBatVolt();  // fill up running avg buffer to curr val 
+  }
 
   setenv("TZ", "PST8PDT", 1); // set the correct timezone for time.h  
   tzset();

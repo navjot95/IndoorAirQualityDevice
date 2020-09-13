@@ -34,6 +34,7 @@
 
 #define WRITE_PRECISION WritePrecision::S
 #define WRITE_BUFFER_SIZE 15
+#define STREAM_BATCH_SIZE 3
 #define FLUSH_INTERVAL (60*35)  // max num seconds to retain data for cloud  
 
 /***********FILL IN (or place in credentials.h)**************
@@ -88,6 +89,12 @@ statusState_t currSMState = START_CONNECTION;
 bool InitCloudService(uint8_t Priority)
 {
   MyPriority = Priority;
+
+  // Add tags to cloud data
+  sensor.clearTags(); 
+  char buff[25];
+  sprintf(buff, "%llu",ESP.getEfuseMac()); 
+  sensor.addTag("chipID", buff);
   
   return true; 
 }
@@ -129,6 +136,7 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
   ES_Event_t ReturnEvent;
   ReturnEvent.EventType = ES_NO_EVENT; // assume no errors
   static uint8_t wifiRetries = 0; 
+  static uint8_t influxPubCntr = 0;  // used to turn on wifi only when publishing data
 
   switch (currSMState)
   {
@@ -136,22 +144,34 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
     {
       if(ThisEvent.EventType == ES_INIT)
       {
-        if(wifiRetries <= MAX_WIFI_RETRIES)
+        if(mainSMinStreamMode() && influxPubCntr != 0)
         {
-          // Setup wifi
-          WiFi.setAutoConnect(false);
-          WiFi.mode(WIFI_STA);
-          WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
-          esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
-          IAQ_PRINTF("Connecting to wifi");
-          ES_Timer_InitTimer(WIFI_TIMER_NUM, WIFI_POLLING_PERIOD); 
-          currSMState = CONNECTING_STATE; 
+          // skip wifi and just write to influx buffer
+          IAQ_PRINTF("Skipping wifi\n"); 
+          currSMState = PUBLISHING_STATE; 
+          ES_Event_t newEvent = {.EventType=CLOUD_PUB_EVENT}; 
+          RunCloudService(newEvent); 
         }
         else
         {
-          wifiRetries = 0; 
-          stopCloudSM();
-          IAQ_PRINTF("Could not connect to Wifi\n");
+          // connect to wifi 
+          if(wifiRetries <= MAX_WIFI_RETRIES)
+          {
+            // Setup wifi
+            WiFi.setAutoConnect(false);
+            WiFi.mode(WIFI_STA);
+            WiFi.begin(WIFI_SSID, WIFI_PASSWORD); 
+            esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+            IAQ_PRINTF("Connecting to wifi ");
+            ES_Timer_InitTimer(WIFI_TIMER_NUM, WIFI_POLLING_PERIOD); 
+            currSMState = CONNECTING_STATE; 
+          }
+          else
+          {
+            wifiRetries = 0; 
+            stopCloudSM();
+            IAQ_PRINTF("Could not connect to Wifi\n");
+          }
         }
       }
       break;
@@ -170,6 +190,7 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
 
           if(timeForResync())  
           {
+            IAQ_PRINTF("Syncing time"); 
             configTzTime(TZ_INFO, "pool.ntp.org");
             currSMState = TIME_SYNCING_STATE; 
             ES_Timer_InitTimer(WIFI_TIMER_NUM, TIME_SYNC_POLLING_PERIOD); 
@@ -191,7 +212,7 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
             currSMState = START_CONNECTION; 
             ES_Event_t newEvent = {.EventType=ES_INIT}; 
             PostCloudService(newEvent); 
-            IAQ_PRINTF("Retrying");
+            IAQ_PRINTF("Retrying\n");
           }
           else
           {
@@ -256,6 +277,10 @@ ES_Event_t RunCloudService(ES_Event_t ThisEvent)
         {
           currSMState = START_CONNECTION; 
           pubRetry = 0; 
+
+          influxPubCntr++; 
+          if(influxPubCntr == STREAM_BATCH_SIZE)
+            influxPubCntr = 0; 
           stopCloudSM(); 
         }
         
@@ -300,26 +325,15 @@ void setupDataPt()
     batchSize = 3; 
     
   client.setWriteOptions(WRITE_PRECISION, batchSize, WRITE_BUFFER_SIZE, FLUSH_INTERVAL, false); 
-
-  // Add tags
-  sensor.clearTags(); 
-  char buff[25];
-  sprintf(buff, "%llu",ESP.getEfuseMac()); 
-  sensor.addTag("chipID", buff);
 }
 
 bool publishDataPt()
 {
-  if ((WiFi.RSSI() == 0) && (WiFi.status() != WL_CONNECTED)) {
-    IAQ_PRINTF("Wifi connection lost");
-  }
-
-  // Write point
   time_t tnow = time(nullptr);
   sensor.setTime(tnow);  
-  // Print what are we exactly writing
   Serial.printf("Writing to influx: ");
-  Serial.println(sensor.toLineProtocol()); 
+  Serial.println(sensor.toLineProtocol()); // Print what are we exactly writing
+  IAQ_PRINTF(ctime(&tnow));
   if (client.writePoint(sensor)) {
     return true; 
   }
