@@ -92,7 +92,7 @@ static uint8_t numGoodReads = 0;  // would need to reset
 static runAvg_t pm10RunAvg = {.runAvgSum=0, .buff={0}, .oldestIdx=0};
 static runAvg_t pm25RunAvg = {.runAvgSum=0, .buff={0}, .oldestIdx=0};
 static bool sensorConnected = false; 
-static IAQmode_t HPM_mode = AUTO_MODE; 
+static IAQmode_t HPM_mode = STREAM_MODE; 
 
 /*------------------------------ Module Code ------------------------------*/
 /****************************************************************************

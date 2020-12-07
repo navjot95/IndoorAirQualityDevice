@@ -64,7 +64,7 @@ void stopCloudSM();
 /*---------------------------- Module Variables ---------------------------*/
 static uint8_t MyPriority;
 Point sensor("IAQ_Readings");  // Data point
-static RTC_DATA_ATTR time_t lastTmStamp = 0;  
+RTC_DATA_ATTR time_t lastTmStamp = 0;  
 
 // InfluxDB client instance with preconfigured InfluxCloud certificate
 InfluxDBClient client(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN, InfluxDbCloud2CACert);

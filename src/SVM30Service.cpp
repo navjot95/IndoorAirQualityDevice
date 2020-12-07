@@ -296,10 +296,10 @@ ES_Event_t RunSVM30Service(ES_Event_t ThisEvent)
 
             if(numReads >= SVM30_SAMPLE_READS)
             {
-              int16_t avgeCO2 =  round((float)eCO2RunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
-              int16_t avgtVOC  = round((float)tVOCRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
-              int16_t avgtm =  round((float)tempRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
-              int16_t avgrh  = round((float)rhRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
+              int16_t avgeCO2 = round((float)eCO2RunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
+              int16_t avgtVOC = round((float)tVOCRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN); 
+              int16_t avgtm   = round((float)tempRunAvg.runAvgSum / (float)RUN_AVG_BUFFER_LEN);
+              int16_t avgrh   = round((float)rhRunAvg.runAvgSum   / (float)RUN_AVG_BUFFER_LEN); 
 
               updateSVM30Vals(avgeCO2, avgtVOC, avgtm, avgrh); 
               IAQ_PRINTF("Avgs:  eCO2:%d  tVOC:%d  tm:%d  rh:%d\n", avgeCO2, avgtVOC, avgtm, avgrh); 

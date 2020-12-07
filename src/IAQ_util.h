@@ -14,7 +14,7 @@
 
 #define RUN_AVG_BUFFER_LEN 8  // size of running average buffer MAX VALUE: 255
 
-// #define IAQ_DEBUG_ENABLE  // Uncomment this to enable debugging printfs
+#define IAQ_DEBUG_ENABLE  // Uncomment this to enable debugging printfs
 #ifdef IAQ_DEBUG_ENABLE
 #define DEBUG_CHECK 1
 #else
@@ -45,7 +45,10 @@ void updateRunAvg(runAvg_t *runAvgValues, uint16_t newSensorVal);
 
 // prints current time into char *str in format: mm/dd hh:mm AM/PM
 // returns 1 on sucess and -1 if buffer is not big enough
-uint8_t getCurrTime(char *str, uint8_t len);
+uint8_t getCurrTime(char * str, uint8_t len, time_t * timeUsed);
+
+// same as getCurrTime() but uses provided time rather than current time 
+uint8_t convertRawTime(const time_t givenTime, char * str, uint8_t len, time_t * timeUsed);
 bool isTimeSynced(); 
 
 uint16_t getBatVolt(); 

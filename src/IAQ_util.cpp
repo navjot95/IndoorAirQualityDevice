@@ -22,21 +22,54 @@ void updateRunAvg(runAvg_t *runAvgValues, uint16_t newSensorVal)
 }
 
 
-uint8_t getCurrTime(char *str, uint8_t len)
+uint8_t getCurrTime(char * str, uint8_t len, time_t * timeUsed)
 {
   time_t now;
-  struct tm tmInfo;
   time(&now);
-  localtime_r(&now, &tmInfo);
-
-  uint8_t hr = (tmInfo.tm_hour % 12) ? (tmInfo.tm_hour % 12) : 12; 
-  const char *dn = (tmInfo.tm_hour < 12) ? "AM" : "PM"; 
-  uint8_t returnVal = snprintf(str, len, "%d/%d %d:%02d %s", tmInfo.tm_mon+1, tmInfo.tm_mday, hr, tmInfo.tm_min, dn);
-  if(returnVal+1 <= len)  // snprintf returns how many chars would be written (not including null char) if the buffer is big enough
-    return 1; 
-  else
-    return -1; 
+  
+  return convertRawTime(now, str, len, timeUsed); 
 } 
+
+uint8_t convertRawTime(const time_t givenTime, char * str, uint8_t len, time_t * timeUsed)
+{
+  if(str == NULL)
+  {
+    return -1; 
+  }
+  
+  if(timeUsed != NULL)
+  {
+    *timeUsed = givenTime; 
+  }
+  struct tm tmInfo; 
+  localtime_r(&givenTime, &tmInfo); 
+
+  if(tmInfo.tm_year > (2019-1900))
+  { 
+    uint8_t hr = (tmInfo.tm_hour % 12) ? (tmInfo.tm_hour % 12) : 12; 
+    const char *dn = (tmInfo.tm_hour < 12) ? "AM" : "PM"; 
+    uint8_t returnVal = snprintf(str, len, "%d/%d %d:%02d %s", tmInfo.tm_mon+1, tmInfo.tm_mday, hr, tmInfo.tm_min, dn);
+    if(returnVal >= len)  // snprintf returns how many chars would be written (not including null char) if the buffer is big enough
+    {
+      return -1; 
+    }
+    else
+    {
+      return 1; 
+    }
+  }
+  else
+  {
+    if(strlcpy(str, "00/00 00:00 AM", len) >= len)
+    {
+      return -1; 
+    }
+    else
+    {
+      return 1; 
+    }
+  }
+}
 
 bool isTimeSynced()
 {

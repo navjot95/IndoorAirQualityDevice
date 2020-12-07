@@ -38,6 +38,8 @@
 #define HDLN_X_OFFSET (SCREEN_WIDTH - calibri_12ptFont.charHeight) 
 #define HDLN2_Y_START 130
 
+#define TIME_STR_BUFFER_LEN 20
+
 
 typedef struct _sensor
 {
@@ -60,8 +62,6 @@ void updateBatLevel(uint8_t batLevel);
 void updateSensorVal(sensor_t *thisSensor, int16_t newVal, int16_t newAltVal);
 uint8_t textVal(sensor_t *thisSensor, int16_t valToCalc);
 void updateTempRH(int16_t temp, int16_t rh);
-bool updateEpaperTime();  
-
 
 /*---------------------------- Module Variables ---------------------------*/
 Epd epd = Epd(); 
@@ -143,23 +143,26 @@ bool initePaper()
   displaySensor(&tVOC); 
   displaySensor(&pm25); 
   displaySensor(&CO2);
+  updateTempRH(0, 0);
   setupHeader();
 
   return true; 
 }
 
 
-void updateScreenSensorVals(IAQsensorVals_t *newVals, bool forceFullRefresh)
+void updateScreenSensorVals(IAQsensorVals_t *newVals, bool forceFullRefresh, bool clearHdln)
 {
   updateSensorVal(&eCO2, newVals->eCO2, -2); 
   updateSensorVal(&tVOC, newVals->tVOC, -2); 
   updateSensorVal(&pm25, newVals->PM25, newVals->PM10);
   updateSensorVal(&CO2, newVals->CO2, -2); 
   updateTempRH(newVals->temp, newVals->rh); 
-  epd.drawRect(HDLN_X_OFFSET - calibri_12ptFont.charHeight, HDLN2_Y_START, calibri_12ptFont.charHeight, 100, false);  // clear out any headline 2 text
+  if(clearHdln)
+  {
+    epd.drawRect(HDLN_X_OFFSET - calibri_12ptFont.charHeight, HDLN2_Y_START, calibri_12ptFont.charHeight, 100, false);  // clear out any headline 2 text
+  }
 
   updateBatLevel(getBatPerct()); 
-  updateEpaperTime(); 
   epd.updateScreen(forceFullRefresh); 
 }
 
@@ -171,18 +174,36 @@ void ePaperPrintfAlert(const char * title, const char * line1, const char * line
   epd.printf(line1, &calibri_12ptFont, 50, 65);
   epd.printf(line2, &calibri_12ptFont, 34, 65);
   updateBatLevel(getBatPerct()); 
-  updateEpaperTime(); 
+  updateEpaperTime(0); 
   epd.updateScreen(true); 
 }
 
-void ePaperChangeHdln(const char *txt, bool updateScrn)
+void ePaperChangeHdln(const char *txt, IAQscreenRefresh_t scrnRefreshType, IAQmode_t newMode)
 {
+  ePaperChangeMode(newMode); 
+  
   epd.drawRect(HDLN_X_OFFSET - calibri_12ptFont.charHeight, HDLN2_Y_START, calibri_12ptFont.charHeight, 100, false);  // clear out any prev text
   epd.printf(txt, &calibri_12ptFont, HDLN_X_OFFSET - calibri_12ptFont.charHeight,HDLN2_Y_START);
   updateBatLevel(getBatPerct()); 
 
-  if(updateScrn)
-    epd.updateScreen(false);
+  switch (scrnRefreshType)
+  {
+    case PARTIAL_SCREEN_REFRESH:
+    {
+      epd.updateScreen(false);
+      break;
+    }
+    case FULL_SCREEN_REFRESH:
+    {
+      epd.updateScreen(true);
+      break;
+    }
+    case NO_SCREEN_REFRESH:
+    default:
+    {
+      break;
+    }
+  }
   
 }
 
@@ -190,45 +211,45 @@ void ePaperChangeMode(IAQmode_t currMode)
 {
   epd.drawRect(HDLN_X_OFFSET-calibri_10ptFont.charHeight, SCREEN_HEIGHT-40, calibri_10ptFont.charHeight, 40, false); 
 
-  if(currMode == NO_MODE)
-  {
-    return; 
-  }else if(currMode == STREAM_MODE)
+  if(currMode == STREAM_MODE)
   {
     epd.printf("Stream", &calibri_10ptFont, HDLN_X_OFFSET-calibri_10ptFont.charHeight, SCREEN_HEIGHT-40);
   }
-  else
+  else if(currMode == AUTO_MODE)
   {
     epd.printf("Auto", &calibri_10ptFont, HDLN_X_OFFSET-calibri_10ptFont.charHeight, SCREEN_HEIGHT-28);
   }
 }
 
 
-bool updateEpaperTime()
+// passing in a value of 0 indicates to take the latest value
+time_t updateEpaperTime(const time_t timeToPrint)
 {
-  bool returnVal; 
-  time_t now;
-  struct tm tmInfo;
-  time(&now);
-  localtime_r(&now, &tmInfo);
+  time_t returnTime; 
 
-  uint8_t hr = (tmInfo.tm_hour % 12) ? (tmInfo.tm_hour % 12) : 12; 
-  const char *dn = (tmInfo.tm_hour < 12) ? "AM" : "PM"; 
-  char str[20]; 
-  if(tmInfo.tm_year > (2019-1900))
+  char str[TIME_STR_BUFFER_LEN]; 
+  if(timeToPrint == 0)
   {
-    returnVal = true; 
-    sprintf(str, "%d/%d %d:%02d %s", tmInfo.tm_mon+1, tmInfo.tm_mday, hr, tmInfo.tm_min, dn);
+    // use the current time
+    if(isTimeSynced())
+    {
+      getCurrTime(str, TIME_STR_BUFFER_LEN, &returnTime);
+    }
+    else 
+    {
+      strcpy(str, "00/00 00:00 AM");
+      returnTime = 0; 
+    }
   }
-  else 
+  else
   {
-    returnVal = false; 
-    sprintf(str, "00/00 00:00 AM");
+    // use provided time 
+    convertRawTime(timeToPrint, str, TIME_STR_BUFFER_LEN, &returnTime);
   }
 
   epd.drawRect(HDLN_X_OFFSET - calibri_12ptFont.charHeight, 0, calibri_12ptFont.charHeight, 110, false); 
   epd.printf(str, &calibri_12ptFont, HDLN_X_OFFSET - calibri_12ptFont.charHeight,0);
-  return returnVal; 
+  return returnTime; 
 }
 
 
@@ -243,7 +264,6 @@ void setupHeader()
   epd.printf(headline2, &calibri_12ptFont, HDLN_X_OFFSET - calibri_12ptFont.charHeight,0);
 
   epd.showImg(emptybatteryBitmaps, SCREEN_WIDTH-emptybatteryWidthPixels, SCREEN_HEIGHT-emptybatteryHeightPixels, emptybatteryWidthPixels, emptybatteryHeightPixels);  // draw battery body
-  // epd.drawRect(SCREEN_WIDTH-emptybatteryWidthPixels+BAT_X_OFFSET, SCREEN_HEIGHT-emptybatteryHeightPixels+BAT_Y_OFFSET, BAT_WIDTH, 18, true); // make battery full
   updateBatLevel(getBatPerct()); 
 } 
 

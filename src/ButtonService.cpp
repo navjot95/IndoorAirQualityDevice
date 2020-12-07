@@ -11,17 +11,19 @@
 /*----------------------------- Include Files -----------------------------*/
 #include "ButtonService.h"
 #include "ES_framework.h"
+#include "IAQ_util.h"
 
 /*----------------------------- Module Defines ----------------------------*/
 #define BT_PRESS 1
 #define BT_RELEASE 0 
-#define DB_TIMER_LEN 40  // length of debounce timer in ms
+#define DB_PRESS_TIMER_LEN 40  // length of debounce timer in ms (min is 40)
+#define DB_RELEASE_TIMER_LEN 2000  // set at much longer so e-screen has enough time for full-refresh
 #define LG_BUTTON_LEN 1500  // time length to hold down button to trigger as long press
 #define TIMEOUT_LEN 10000  
 
 typedef enum{
   START_SM_STATE,
-  WAIT_SM_STATE
+  WAIT_SM_STATE,
 } statusState_t; 
 
 
@@ -101,7 +103,7 @@ ES_Event_t RunButtonService(ES_Event_t ThisEvent)
     case START_SM_STATE:
     {
       unsigned long elapsed_time = millis() - timeStamp; 
-      if((elapsed_time > DB_TIMER_LEN) && ThisEvent.EventType == ES_HW_BUTTON_EVENT && ThisEvent.EventParam == BT_PRESS)
+      if((elapsed_time > DB_RELEASE_TIMER_LEN) && ThisEvent.EventType == ES_HW_BUTTON_EVENT && ThisEvent.EventParam == BT_PRESS)
       {
         timeStamp = millis(); 
         currStatusState = WAIT_SM_STATE; 
@@ -111,12 +113,12 @@ ES_Event_t RunButtonService(ES_Event_t ThisEvent)
     case WAIT_SM_STATE:
     {
       unsigned long elapsed_time = millis() - timeStamp; 
-      if((elapsed_time > DB_TIMER_LEN) && (elapsed_time < LG_BUTTON_LEN) && ThisEvent.EventType == ES_HW_BUTTON_EVENT && ThisEvent.EventParam == BT_RELEASE)
+      if((elapsed_time > DB_PRESS_TIMER_LEN) && (elapsed_time < LG_BUTTON_LEN) && ThisEvent.EventType == ES_HW_BUTTON_EVENT && ThisEvent.EventParam == BT_RELEASE)
       {
         ES_Event_t newEvent; 
         newEvent.EventType = ES_SW_BUTTON_PRESS; 
         newEvent.EventParam = SHORT_BT_PRESS;
-        // printf("Short bt press: %lu\n", elapsed_time); 
+        printf("Short bt press: %lu\n", elapsed_time); 
         PostMainService(newEvent); 
 
         currStatusState = START_SM_STATE; 
@@ -128,7 +130,6 @@ ES_Event_t RunButtonService(ES_Event_t ThisEvent)
         newEvent.EventType = ES_SW_BUTTON_PRESS; 
         newEvent.EventParam = LONG_BT_PRESS;
         PostMainService(newEvent); 
-        // Sprintf("%lu\n", elapsed_time); 
 
         currStatusState = START_SM_STATE; 
         timeStamp = millis(); 

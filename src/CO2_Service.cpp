@@ -246,6 +246,8 @@ ES_Event_t RunCO2Service(ES_Event_t ThisEvent)
             retryAttempts = 0; 
             numReads = 0; 
             updateCO2Val(sensorVal); 
+            IAQ_PRINTF("Avg CO2: %d\n", sensorVal); 
+
             currStatusState = START_STATE; 
             ES_Timer_StopTimer(CO2_TIMER_NUM);
           }

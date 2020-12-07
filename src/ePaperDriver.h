@@ -22,11 +22,19 @@ typedef struct IAQsensorVals
   int16_t rh;
 }IAQsensorVals_t;
 
+typedef enum
+{
+  NO_SCREEN_REFRESH = 0, 
+  PARTIAL_SCREEN_REFRESH, 
+  FULL_SCREEN_REFRESH,
+} IAQscreenRefresh_t; 
+
 bool initePaper(); 
-void updateScreenSensorVals(IAQsensorVals_t *newVals, bool forceFullRefresh);
+void updateScreenSensorVals(IAQsensorVals_t *newVals, bool forceFullRefresh, bool clearHdln);
 void ePaperPrintfAlert(const char * title, const char * line1, const char * line2); 
-void ePaperChangeHdln(const char *txt, bool updateScrn);
+void ePaperChangeHdln(const char *txt, IAQscreenRefresh_t scrnRefreshType, IAQmode_t newMode);
 void ePaperChangeMode(IAQmode_t currMode);
+time_t updateEpaperTime(const time_t timeToPrint);
 
 #endif /* EPaperDrv_H */
 
