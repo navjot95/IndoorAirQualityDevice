@@ -24,6 +24,7 @@
 
 /*----------------------------- Module Defines ----------------------------*/
 #define DEVICE "ESP32"
+#define IAQ_SENSOR_LOCATION "Bedroom"
 #define MAX_WIFI_RETRIES 2
 #define WIFI_POLLING_PERIOD 200  // ms
 #define WIFI_RETRY_TMOUT 5000U  // ms
@@ -67,7 +68,8 @@ Point sensor("IAQ_Readings");  // Data point
 RTC_DATA_ATTR time_t lastTmStamp = 0;  
 
 // InfluxDB client instance with preconfigured InfluxCloud certificate
-InfluxDBClient client(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN, InfluxDbCloud2CACert);
+// InfluxDBClient client(INFLUXDB_URL, INFLUXDB_ORG, INFLUXDB_BUCKET, INFLUXDB_TOKEN);
+InfluxDBClient client; 
 statusState_t currSMState = START_CONNECTION;  
 
 /*------------------------------ Module Code ------------------------------*/
@@ -90,11 +92,12 @@ bool InitCloudService(uint8_t Priority)
 {
   MyPriority = Priority;
 
+  // configure client
+  client.setConnectionParamsV1(INFLUXDB_URL, INFLUXDB_DB_NAME, INFLUXDB_USER, INFLUXDB_PWD, nullptr);
+
   // Add tags to cloud data
   sensor.clearTags(); 
-  char buff[25];
-  sprintf(buff, "%llu",ESP.getEfuseMac()); 
-  sensor.addTag("chipID", buff);
+  sensor.addTag("Location", IAQ_SENSOR_LOCATION);
   
   return true; 
 }
@@ -331,14 +334,14 @@ bool publishDataPt()
 {
   time_t tnow = time(nullptr);
   sensor.setTime(tnow);  
-  Serial.printf("Writing to influx: ");
-  Serial.println(sensor.toLineProtocol()); // Print what are we exactly writing
+  IAQ_PRINTF("Writing to influx: ");
+  // Serial.println(sensor.toLineProtocol()); // Print what are we exactly writing
   IAQ_PRINTF(ctime(&tnow));
   if (client.writePoint(sensor)) {
     return true; 
   }
-  Serial.printf("InfluxDB write failed: ");
-  Serial.println(client.getLastErrorMessage()); 
+  IAQ_PRINTF("InfluxDB write failed: ");
+  // Serial.println(client.getLastErrorMessage()); 
   return false; 
 }
 

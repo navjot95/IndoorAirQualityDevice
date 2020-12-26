@@ -98,6 +98,11 @@ bool InitMainService(uint8_t Priority)
   {
     getBatVolt();  // fill up running avg buffer to curr val 
   }
+  if(getBatVolt() < BAT_LOW_THRES)
+  {
+    shutdownBat(); 
+    return false; 
+  }  
 
   setenv("TZ", "PST8PDT", 1); // set the correct timezone for time.h  
   tzset();
@@ -169,6 +174,7 @@ ES_Event_t RunMainService(ES_Event_t ThisEvent)
     if(getBatVolt() < BAT_LOW_THRES)
     {
       shutdownBat(); 
+      return ReturnEvent; 
     }    
   }
   if(ThisEvent.EventType == ES_SW_BUTTON_PRESS && ThisEvent.EventParam == LONG_BT_PRESS)
@@ -465,7 +471,7 @@ void shutdownBat()
   ePaperChangeHdln("Device OFF", NO_SCREEN_REFRESH, NO_MODE);
   ePaperPrintfAlert("Low Battery", "Please plug in and press", "button when charged.");
   delay(1000); 
-  shutdownIAQ(false);
+  shutdownIAQ(true);  // check back in periodically
 }
 
 /*------------------------------- Footnotes -------------------------------*/
