@@ -300,7 +300,7 @@ void updateCloudSensorVals(IAQsensorVals_t *sensorReads)
   sensor.clearFields(); // Clear fields for reusing the point. Tags will remain untouched
   sensor.addField("eCO2", sensorReads->eCO2); 
   sensor.addField("CO2", sensorReads->CO2); 
-  sensor.addField("PM2.5", sensorReads->PM25); 
+  sensor.addField("PM25", sensorReads->PM25); 
   sensor.addField("PM10", sensorReads->PM10); 
   sensor.addField("tVOC", sensorReads->tVOC); 
   sensor.addField("tm", sensorReads->temp); 
